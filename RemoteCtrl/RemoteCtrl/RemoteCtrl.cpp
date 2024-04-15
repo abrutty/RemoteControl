@@ -4,6 +4,7 @@
 #include "pch.h"
 #include "framework.h"
 #include "RemoteCtrl.h"
+#include "ServerSocket.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -34,6 +35,23 @@ int main()
         else
         {
             // TODO: 在此处为应用程序的行为编写代码。
+            CServerSocket* pServer = CServerSocket::getInstance();
+            int count = 0;
+			if (pServer->InitSocket() == FALSE) {
+				MessageBox(NULL, _T(""), _T("网络初始化失败"), MB_OK | MB_ICONERROR);
+				exit(0);
+			}
+            while ( (pServer=CServerSocket::getInstance()) !=NULL) {
+				if (pServer->AcceptClient() == FALSE) {
+					if (count >= 3) {
+						MessageBox(NULL, _T("超过三次无法接入用户，退出"), _T("接入用户失败"), MB_OK | MB_ICONERROR);
+						exit(0);
+					}
+					MessageBox(NULL, _T(""), _T("接入用户失败"), MB_OK | MB_ICONERROR);
+					count++;
+				}
+                int ret = pServer->DealCommand();
+            }  
         }
     }
     else
