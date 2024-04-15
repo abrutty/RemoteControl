@@ -3,9 +3,23 @@
 #include "framework.h"
 
 #define BUFFER_SIZE 4096
+#pragma pack(push)  // 保存当前字节对齐的状态
+#pragma pack(1)	// 强制取消字节对齐，改为连续存放
 class CPacket {
 public:
 	CPacket() :sHead(0), nLength(0), sCmd(0), sSUm(0) {}
+	// 打包构造
+	CPacket(WORD sCmd, const BYTE* pData, size_t nSize){
+		this->sHead = 0xFEFF;
+		this->nLength = nSize + 4;	// 数据长度+sCmd长度(2)+sSum长度(2)
+		this->sCmd = sCmd;
+		this->strData.resize(nSize);
+		memcpy((void*)strData.c_str(), pData, nSize);
+		this->sSUm = 0;
+		for (size_t j = 0; j < strData.size(); j++) { // 进行和校验
+			this->sSUm += BYTE(strData[j]) & 0xFF;
+		}
+	}
 	CPacket(const CPacket& pack) {
 		sHead = pack.sHead;
 		nLength = pack.nLength;
@@ -23,6 +37,7 @@ public:
 		}
 		return *this;
 	}
+	// 解包构造函数
 	CPacket(const BYTE* pData, size_t& nSize) {
 		size_t i = 0;	// i始终指向已读到数据最新的位置
 		for (; i < nSize; i++) {
@@ -56,7 +71,7 @@ public:
 		i += 2;
 		WORD sum = 0;
 		for (size_t j = 0; j < strData.size(); j++) { // 进行和校验
-			sum += BYTE(strData[i]) & 0xFF;
+			sum += BYTE(strData[j]) & 0xFF;
 		}
 		if (sum == sSUm) {
 			nSize = i; //  head(2字节）nLength(4字节)data...
@@ -65,13 +80,32 @@ public:
 		nSize = 0;
 	}
 	~CPacket() {}
+	int Size() { return nLength + 6; } // 数据包的大小
+	const char* Data() {
+		strOut.resize(nLength + 6);
+		BYTE* pData = (BYTE*)strOut.c_str();
+		*(WORD*)pData = sHead;
+		pData += 2;
+		*(DWORD*)pData = nLength;
+		pData += 4;
+		*(WORD*)pData = sCmd;
+		pData += 2;
+		memcpy(pData, strData.c_str(), strData.size());
+		pData += strData.size();
+		*(WORD*)pData = sSUm;
+
+		return strOut.c_str();
+	}
+
 public:
 	WORD sHead;				// 包头，固定位，0xFEFF
 	DWORD nLength;			// 包长度，从控制命令开始，到和校验结束
 	WORD sCmd;				// 控制命令
 	std::string strData;	// 包数据
 	WORD sSUm;				// 和校验
+	std::string strOut;		// 整个包的数据
 };
+#pragma pack(pop)	// 还原字节对齐
 
 class CServerSocket
 {
@@ -120,9 +154,13 @@ public:
 		}
 		return -1;
 	}
-	BOOL Send(const char* pData, int nSize) {
-		if (m_client == -1) return FALSE;
+	bool Send(const char* pData, int nSize) {
+		if (m_client == -1) return false;
 		return send(m_client, pData, nSize, 0) > 0;
+	}
+	bool Send(CPacket& pack) {
+		if (m_client == -1) return false;
+		return send(m_client, pack.Data(), pack.Size(), 0) > 0;
 	}
 private:
 	SOCKET m_sock, m_client;
