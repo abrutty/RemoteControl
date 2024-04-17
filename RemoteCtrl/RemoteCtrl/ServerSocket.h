@@ -13,8 +13,14 @@ public:
 		this->sHead = 0xFEFF;
 		this->nLength = nSize + 4;	// 数据长度+sCmd长度(2)+sSum长度(2)
 		this->sCmd = sCmd;
-		this->strData.resize(nSize);
-		memcpy((void*)strData.c_str(), pData, nSize);
+		if (nSize > 0) {
+			this->strData.resize(nSize);
+			memcpy((void*)strData.c_str(), pData, nSize);
+		}
+		else {
+			this->strData.clear();
+		}
+		
 		this->sSUm = 0;
 		for (size_t j = 0; j < strData.size(); j++) { // 进行和校验
 			this->sSUm += BYTE(strData[j]) & 0xFF;
@@ -107,11 +113,23 @@ public:
 };
 #pragma pack(pop)	// 还原字节对齐
 
+
+typedef struct MouseEvent{
+	MouseEvent() {
+		nAction = 0;
+		nButton = -1;
+		ptXY.x = 0;
+		ptXY.y = 0;
+	}
+	WORD nAction;	// 移动、点击、双击
+	WORD nButton;	// 左键、右键、滚轮
+	POINT ptXY;		// 坐标
+}MOUSEEV, *PMOUSEEV;
 class CServerSocket
 {
 public:
 	static CServerSocket* getInstance() { // 构造和析构是私有的，通过静态函数方式访问
-		if (mInstance == NULL) {
+		if (mInstance == nullptr) {
 			mInstance = new CServerSocket;
 		}
 		return mInstance;
@@ -161,6 +179,20 @@ public:
 	bool Send(CPacket& pack) {
 		if (m_client == -1) return false;
 		return send(m_client, pack.Data(), pack.Size(), 0) > 0;
+	}
+	bool GetFilePath(std::string& filePath) { // 获取文件列表
+		if ((m_packet.sCmd >= 2) && (m_packet.sCmd <= 4)) {
+			filePath = m_packet.strData;
+			return true;
+		}
+		return false;
+	}
+	bool GetMouseEvent(MOUSEEV& mouse) {
+		if (m_packet.sCmd == 5) {
+			memcpy(&mouse, m_packet.strData.c_str(), sizeof(mouse));
+			return true;
+		}
+		return false;
 	}
 private:
 	SOCKET m_sock, m_client;
