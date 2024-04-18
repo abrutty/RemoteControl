@@ -5,10 +5,12 @@
 #include "framework.h"
 #include "RemoteCtrl.h"
 #include "ServerSocket.h"
+#include "LockDialog.h"
 
 #include <direct.h>
 #include <io.h>
 #include <list>
+#include "atlimage.h"
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -234,6 +236,85 @@ int MouseEvent() {
         return -1;
     }
 }
+
+int SendScreen() {
+    CImage screen;  // GDI对象，全局设备接口
+    HDC hScreen = ::GetDC(nullptr);
+    int nBitPerPixel = GetDeviceCaps(hScreen, BITSPIXEL);
+    int nWidth = GetDeviceCaps(hScreen, HORZRES);
+    int nHeight = GetDeviceCaps(hScreen, VERTRES);
+    screen.Create(nWidth, nHeight, nBitPerPixel);   // 创建屏幕
+    BitBlt(screen.GetDC(), 0, 0, 1920, 1020, hScreen, 0, 0, SRCCOPY);   // 把图像复制到屏幕中
+    ReleaseDC(nullptr, hScreen);
+
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, 0);   // 在内存中分配一个全局的堆
+    if (hMem == nullptr) return -1;
+    IStream* pStream = nullptr;    // 建立内存流，把图片存到内存中
+    HRESULT ret = CreateStreamOnHGlobal(hMem, TRUE, &pStream);  // 在全局对象上设置内存流
+    if (ret == S_OK) {
+        screen.Save(pStream, Gdiplus::ImageFormatPNG);  // 保存图像到内存流中
+        //screen.Save(_T("test.png"), Gdiplus::ImageFormatPNG);   // 保存图像到文件
+        LARGE_INTEGER begin = { 0 };
+        pStream->Seek(begin, STREAM_SEEK_SET, nullptr); // 保存后，将流指针恢复到开头
+        PBYTE pData = (PBYTE)GlobalLock(hMem);  // 上锁，读取数据
+        SIZE_T nSize = GlobalSize(hMem);
+        CPacket pack(6, pData, nSize);
+        CServerSocket::getInstance()->Send(pack);
+        GlobalUnlock(hMem);
+    }
+    pStream->Release();
+    GlobalFree(hMem);
+    screen.ReleaseDC();
+    return 0;
+}
+
+CLockDialog dlg;
+unsigned int thread_id = 0;
+
+// 锁机的子线程，放在主线程中就一直处于消息循环，收不到解锁的消息
+unsigned __stdcall ThreadLockDlg(void* arg) {
+    TRACE("%s(%d):%d\r\n", __FUNCTION__, __LINE__, GetCurrentThreadId());
+	dlg.Create(IDD_DIALOG_INFO, nullptr);
+	dlg.ShowWindow(SW_SHOW);    // 非模态对话框
+	dlg.SetWindowPos(&dlg.wndTopMost, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE); // 窗口置顶
+	ShowCursor(false);  // 不显示鼠标
+	::ShowWindow(::FindWindow(_T("Shell_TrayWnd"), nullptr), SW_HIDE); // 隐藏任务栏
+	CRect rect;
+	dlg.GetWindowRect(rect);    // 获取对话框的范围
+	ClipCursor(rect);   // 将鼠标限制在对话框范围内
+	// 加上消息循环才能生效
+	MSG msg;
+	while (GetMessage(&msg, nullptr, 0, 0)) {
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+		if (msg.message == WM_KEYDOWN) { // 按下按键
+			if (msg.wParam == 0x1B) break; // 按下esc键退出
+		}
+	}
+	
+	ShowCursor(true);
+	::ShowWindow(::FindWindow(_T("Shell_TrayWnd"), nullptr), SW_SHOW); // 恢复任务栏
+    dlg.DestroyWindow();
+    _endthreadex(0);
+    return 0;
+}
+int LockMachine() {
+    if (dlg.m_hWnd == nullptr || dlg.m_hWnd == INVALID_HANDLE_VALUE) {
+        _beginthreadex(nullptr, 0, ThreadLockDlg, nullptr, 0, &thread_id);
+        TRACE("%s(%d):%d\r\n", __FUNCTION__, __LINE__, thread_id);
+    }
+    CPacket pack(7, nullptr, 0);
+    CServerSocket::getInstance()->Send(pack);
+    return 0;
+}
+
+int UnlockMachine() {
+   PostThreadMessage(thread_id, WM_KEYDOWN, 0x1B, 0); // 消息机制根据线程，而不是句柄
+    //::SendMessage(dlg.m_hWnd, WM_KEYDOWN, 0x1B, 0x01E0001);
+	CPacket pack(7, nullptr, 0);
+	CServerSocket::getInstance()->Send(pack);
+    return 0;
+}
 int main()
 {
     int nRetCode = 0;
@@ -251,7 +332,8 @@ int main()
         }
         else
         {
-            int nCmd = 1;
+            
+            int nCmd = 7;
             switch (nCmd)
             {
             case 1: 
@@ -269,9 +351,24 @@ int main()
             case 5:
                 MouseEvent();
                 break;
+            case 6:
+                SendScreen(); // 发送屏幕
+                break;
+            case 7:
+                LockMachine();
+                Sleep(50);
+                LockMachine();
+                break;
+            case 8:
+                UnlockMachine();
+                break;
             default:
                 break;
             }
+            Sleep(5000);
+            UnlockMachine();
+            TRACE("m_hwnd=%08x\r\n", dlg.m_hWnd);
+            while (dlg.m_hWnd != nullptr) Sleep(10);
             MakeDriverInfo();
             // TODO: 在此处为应用程序的行为编写代码。
 			//CServerSocket* pServer = CServerSocket::getInstance();
