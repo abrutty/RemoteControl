@@ -315,6 +315,57 @@ int UnlockMachine() {
 	CServerSocket::getInstance()->Send(pack);
     return 0;
 }
+
+int TestConnect() {
+    CPacket pack(1981, nullptr, 0);
+    int ret = CServerSocket::getInstance()->Send(pack);
+    TRACE("send ret = %d\r\n", ret);
+    return 0;
+}
+
+int ExcuteCommand(int nCmd) {
+    int ret = 0;
+	switch (nCmd)
+	{
+	case 1:
+        ret = MakeDriverInfo(); // 查看磁盘分区
+		break;
+	case 2:
+        ret = MakeDirectoryInfo(); // 查看指定目录下的文件
+		break;
+	case 3:
+        ret = RunFile(); // 打开文件
+		break;
+	case 4:
+        ret = DownloadFile(); // 下载文件
+		break;
+	case 5:
+        ret = MouseEvent();
+		break;
+	case 6:
+        ret = SendScreen(); // 发送屏幕
+		break;
+	case 7:
+        ret = LockMachine();
+		/*Sleep(50);
+		LockMachine();*/
+		break;
+	case 8:
+        ret = UnlockMachine();
+		break;
+    case 1981:
+        TestConnect();
+        break;
+	default:
+		break;
+	}
+    return ret;
+	/*Sleep(5000);
+	UnlockMachine();
+	TRACE("m_hwnd=%08x\r\n", dlg.m_hWnd);
+	while (dlg.m_hWnd != nullptr) Sleep(10);*/
+}
+
 int main()
 {
     int nRetCode = 0;
@@ -332,62 +383,34 @@ int main()
         }
         else
         {
-            
-            int nCmd = 7;
-            switch (nCmd)
-            {
-            case 1: 
-                MakeDriverInfo(); // 查看磁盘分区
-                break;
-            case 2: 
-                MakeDirectoryInfo(); // 查看指定目录下的文件
-                break;
-            case 3:
-                RunFile(); // 打开文件
-                break;
-            case 4:
-                DownloadFile(); // 下载文件
-                break;
-            case 5:
-                MouseEvent();
-                break;
-            case 6:
-                SendScreen(); // 发送屏幕
-                break;
-            case 7:
-                LockMachine();
-                Sleep(50);
-                LockMachine();
-                break;
-            case 8:
-                UnlockMachine();
-                break;
-            default:
-                break;
-            }
-            Sleep(5000);
-            UnlockMachine();
-            TRACE("m_hwnd=%08x\r\n", dlg.m_hWnd);
-            while (dlg.m_hWnd != nullptr) Sleep(10);
-            MakeDriverInfo();
             // TODO: 在此处为应用程序的行为编写代码。
-			//CServerSocket* pServer = CServerSocket::getInstance();
-            /*int count = 0;
-			if (pServer->InitSocket() == FALSE) {
-				MessageBox(NULL, _T(""), _T("网络初始化失败"), MB_OK | MB_ICONERROR);
-				exit(0);
-			}
-			while ((pServer = CServerSocket::getInstance()) != NULL) {
-				if (pServer->AcceptClient() == FALSE) {
-					if (count >= 3) {
-						MessageBox(NULL, _T("超过三次无法接入用户，退出"), _T("接入用户失败"), MB_OK | MB_ICONERROR);
-						exit(0);
-					}
-					MessageBox(NULL, _T(""), _T("接入用户失败"), MB_OK | MB_ICONERROR);
-					count++;
-				}
-				int ret = pServer->DealCommand();
-			}  */
+            CServerSocket* pServer = CServerSocket::getInstance();
+            int count = 0;
+            if (pServer->InitSocket() == false) {
+                MessageBox(nullptr, _T("网络初始化异常"), _T("网络初始化失败"), MB_OK|MB_ICONERROR);
+                exit(0);
+            }
+            while (CServerSocket::getInstance()!=nullptr) {
+                if (pServer->AcceptClient() == false) {
+                    if (count >= 3) {
+                        MessageBox(nullptr, _T("多次无法接入用户"), _T("接入用户失败"), MB_OK | MB_ICONERROR);
+                        exit(0);
+                    }
+                    MessageBox(nullptr, _T("无法接入用户，自动重试"), _T("接入用户失败"), MB_OK | MB_ICONERROR);
+                }
+                TRACE("accept client true\r\n");
+                int ret = pServer->DealCommand();
+                TRACE("Sever DealCommand ret = %d\r\n", ret);
+                if (ret > 0) {
+                    ret = ExcuteCommand(ret);
+                    if (ret != 0) {
+                        TRACE("执行命令失败，%d, ret=%d", pServer->GetPacket().sCmd, ret);
+                    }
+                    pServer->CloseClient(); // 采用短连接方式
+                    TRACE("clinet closed\r\n");
+                }
+                
+            }
         }
     }
     else
