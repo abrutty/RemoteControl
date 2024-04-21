@@ -31,6 +31,7 @@ public:
 // 实现
 protected:
 	DECLARE_MESSAGE_MAP()
+public:
 };
 
 CAboutDlg::CAboutDlg() : CDialogEx(IDD_ABOUTBOX)
@@ -52,6 +53,8 @@ END_MESSAGE_MAP()
 
 CRemoteClientDlg::CRemoteClientDlg(CWnd* pParent /*=nullptr*/)
 	: CDialogEx(IDD_REMOTECLIENT_DIALOG, pParent)
+	, m_server_address(0)
+	, m_nPort(_T(""))
 {
 	m_hIcon = AfxGetApp()->LoadIcon(IDR_MAINFRAME);
 }
@@ -59,6 +62,29 @@ CRemoteClientDlg::CRemoteClientDlg(CWnd* pParent /*=nullptr*/)
 void CRemoteClientDlg::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
+	DDX_IPAddress(pDX, IDC_IPADDRESS_SERV, m_server_address);
+	DDX_Text(pDX, IDC_EDIT_PORT, m_nPort);
+	DDX_Control(pDX, IDC_TREE_DIR, m_Tree);
+	DDX_Control(pDX, IDC_LIST_FILE, m_List);
+}
+
+int CRemoteClientDlg::SendCommandPacket(int nCmd, bool autoClose, BYTE* pData, size_t nLength)
+{
+	UpdateData();
+	CClientSocket* pClient = CClientSocket::getInstance();
+	bool ret = pClient->InitSocket(m_server_address, atoi((LPCTSTR)m_nPort));
+	if (ret == false) {
+		AfxMessageBox("网络初始化失败");
+		return -1;
+	}
+	CPacket pack(nCmd, pData, nLength);
+	ret = pClient->Send(pack);
+	TRACE("client send ret = %d\r\n", ret);
+	int cmd = pClient->DealCommand();
+	TRACE("ACK=%d\r\n", cmd);
+	if(autoClose==true)
+		pClient->CloseSocket();
+	return cmd;
 }
 
 BEGIN_MESSAGE_MAP(CRemoteClientDlg, CDialogEx)
@@ -66,6 +92,11 @@ BEGIN_MESSAGE_MAP(CRemoteClientDlg, CDialogEx)
 	ON_WM_PAINT()
 	ON_WM_QUERYDRAGICON()
 	ON_BN_CLICKED(IDC_BTN_TEST, &CRemoteClientDlg::OnBnClickedBtnTest)
+	ON_NOTIFY(TVN_SELCHANGED, IDC_TREE_DIR, &CRemoteClientDlg::OnTvnSelchangedTree1)
+	ON_BN_CLICKED(IDC_BTN_FILEINFO, &CRemoteClientDlg::OnBnClickedBtnFileinfo)
+	ON_NOTIFY(NM_DBLCLK, IDC_TREE_DIR, &CRemoteClientDlg::OnNMDblclkTreeDir)
+	ON_NOTIFY(NM_CLICK, IDC_TREE_DIR, &CRemoteClientDlg::OnNMClickTreeDir)
+	ON_NOTIFY(NM_RCLICK, IDC_LIST_FILE, &CRemoteClientDlg::OnNMRClickListFile)
 END_MESSAGE_MAP()
 
 
@@ -101,6 +132,10 @@ BOOL CRemoteClientDlg::OnInitDialog()
 	SetIcon(m_hIcon, FALSE);		// 设置小图标
 
 	// TODO: 在此添加额外的初始化代码
+	UpdateData();
+	m_server_address = 0x7F000001;
+	m_nPort = _T("9527");
+	UpdateData(FALSE);
 
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
@@ -159,16 +194,131 @@ HCURSOR CRemoteClientDlg::OnQueryDragIcon()
 void CRemoteClientDlg::OnBnClickedBtnTest()
 {
 	// TODO: 在此添加控件通知处理程序代码
-	CClientSocket* pClient = CClientSocket::getInstance();
-	bool ret = pClient->InitSocket("127.0.0.1");
-	if (ret == false) {
-		AfxMessageBox("网络初始化失败");
-		return;
+	SendCommandPacket(1981);
+	
+}
+
+
+void CRemoteClientDlg::OnTvnSelchangedTree1(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	LPNMTREEVIEW pNMTreeView = reinterpret_cast<LPNMTREEVIEW>(pNMHDR);
+	// TODO: 在此添加控件通知处理程序代码
+	*pResult = 0;
+}
+
+
+void CRemoteClientDlg::OnBnClickedBtnFileinfo()
+{
+	int ret = SendCommandPacket(1);
+	if (ret == -1) {
+		AfxMessageBox(_T("命令处理失败"));
 	}
-	CPacket pack(1981, nullptr, 0);
-	ret = pClient->Send(pack);
-	TRACE("client send ret = %d\r\n", ret);
-	int cmd = pClient->DealCommand();
-	TRACE("ACK=%d\r\n", cmd);
+	CClientSocket* pClient = CClientSocket::getInstance();
+	std::string drivers = pClient->GetPacket().strData;
+	std::string dr;
+	m_Tree.DeleteAllItems();
+	for (size_t i = 0; i < drivers.length(); i++) {
+		if (drivers[i] == ',') {
+			dr += ":";
+			HTREEITEM hTemp= m_Tree.InsertItem(dr.c_str(), TVI_ROOT, TVI_LAST);
+			m_Tree.InsertItem("", hTemp, TVI_LAST);
+			dr.clear();
+			continue;
+		}
+		dr += drivers[i];
+	}
+	dr += ":";
+	HTREEITEM hTemp = m_Tree.InsertItem(dr.c_str(), TVI_ROOT, TVI_LAST);
+	m_Tree.InsertItem("", hTemp, TVI_LAST);
+}
+
+CString CRemoteClientDlg::GetPath(HTREEITEM hTree) {
+	CString strRet, strTmp;
+	do {
+		strTmp = m_Tree.GetItemText(hTree);
+		strRet = strTmp + "\\" + strRet;
+		hTree = m_Tree.GetParentItem(hTree);
+	} while (hTree!=nullptr);
+	return strRet;
+}
+
+void CRemoteClientDlg::DeleteTreeChildItem(HTREEITEM hTree) {
+	HTREEITEM sub = nullptr;
+	do {
+		sub = m_Tree.GetChildItem(hTree);
+		if (sub != nullptr) m_Tree.DeleteItem(sub);
+	} while (sub!=nullptr);
+}
+
+void CRemoteClientDlg::LoadFileInfo()
+{
+	CPoint ptMouse;
+	GetCursorPos(&ptMouse);
+	m_Tree.ScreenToClient(&ptMouse);
+	HTREEITEM hTreeSelected = m_Tree.HitTest(ptMouse, 0);
+	if (hTreeSelected == nullptr) return;
+	if (m_Tree.GetChildItem(hTreeSelected) == nullptr) return; // 为空说明点的是一个文件
+	DeleteTreeChildItem(hTreeSelected);
+	m_List.DeleteAllItems();
+	CString strPath = GetPath(hTreeSelected);
+	TRACE("hTreeSelected %08X\r\n", hTreeSelected);
+	int nCmd = SendCommandPacket(2, false, (BYTE*)(LPCTSTR)strPath, strPath.GetLength());
+	CClientSocket* pClient = CClientSocket::getInstance();
+	PFILEINFO pInfo = (PFILEINFO)pClient->GetPacket().strData.c_str();
+
+	while (pInfo->hasNext) {
+		if (pInfo->isDirectory) {
+			if (((CString)(pInfo->szFileName) == ".") || ((CString)(pInfo->szFileName) == "..")) {
+				int cmd = pClient->DealCommand();
+				TRACE("ack=%d\r\n", cmd);
+				if (cmd < 0) break;
+				pInfo = (PFILEINFO)pClient->GetPacket().strData.c_str();
+				continue;
+			}
+			HTREEITEM hTemp = m_Tree.InsertItem(pInfo->szFileName, hTreeSelected, TVI_LAST);
+			m_Tree.InsertItem("", hTemp, TVI_LAST);
+		}
+		else {
+			m_List.InsertItem(0, pInfo->szFileName);
+		}
+
+		int cmd = pClient->DealCommand();
+		TRACE("ack=%d\r\n", cmd);
+		if (cmd < 0) break;
+		pInfo = (PFILEINFO)pClient->GetPacket().strData.c_str();
+	}
 	pClient->CloseSocket();
+}
+
+void CRemoteClientDlg::OnNMDblclkTreeDir(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	*pResult = 0;
+	LoadFileInfo();
+}
+
+
+void CRemoteClientDlg::OnNMClickTreeDir(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	*pResult = 0;
+	LoadFileInfo();
+}
+
+
+void CRemoteClientDlg::OnNMRClickListFile(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	LPNMITEMACTIVATE pNMItemActivate = reinterpret_cast<LPNMITEMACTIVATE>(pNMHDR);
+	// TODO: 在此添加控件通知处理程序代码
+	*pResult = 0;
+	CPoint ptMouse, ptList;
+	GetCursorPos(&ptMouse);
+	ptList = ptMouse;
+	m_List.ScreenToClient(&ptList);
+	int listSelected = m_List.HitTest(ptList);
+	if (listSelected < 0) return;
+	CMenu menu;
+	menu.LoadMenu(IDR_MENU_RCLICK);
+	CMenu* pPopup = menu.GetSubMenu(0);
+	if (pPopup != nullptr) {
+		pPopup->TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON, ptMouse.x, ptMouse.y, this);
+	}
 }

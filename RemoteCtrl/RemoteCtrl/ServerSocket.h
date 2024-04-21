@@ -1,7 +1,7 @@
 #pragma once
 #include "pch.h"
 #include "framework.h"
-
+void Dump(BYTE* pData, size_t nSize);
 #define BUFFER_SIZE 4096
 #pragma pack(push)  // 保存当前字节对齐的状态
 #pragma pack(1)	// 强制取消字节对齐，改为连续存放
@@ -125,6 +125,20 @@ typedef struct MouseEvent{
 	WORD nButton;	// 左键、右键、滚轮
 	POINT ptXY;		// 坐标
 }MOUSEEV, *PMOUSEEV;
+
+typedef struct file_info {
+	file_info() {
+		isInvalid = false;
+		isDirectory = -1;
+		hasNext = true;
+		memset(szFileName, 0, sizeof(szFileName));
+	}
+	bool isInvalid;         // 是否有效
+	int isDirectory;       // 是否为目录
+	bool hasNext;           // 是否还有后续
+	char szFileName[256];   // 文件名
+}FILEINFO, * PFILEINFO;
+
 class CServerSocket
 {
 public:
@@ -190,6 +204,7 @@ public:
 	}
 	bool Send(CPacket& pack) {
 		if (m_client == -1) return false;
+		Dump((BYTE*)pack.Data(), pack.Size());
 		return send(m_client, pack.Data(), pack.Size(), 0) > 0;
 	}
 	bool GetFilePath(std::string& filePath) { // 获取文件列表

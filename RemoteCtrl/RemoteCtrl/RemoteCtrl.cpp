@@ -22,18 +22,7 @@ CWinApp theApp;
 
 //using namespace std;
 
-typedef struct file_info {
-    file_info(){
-        isInvalid = false;
-        isDirectory = false;
-        hasNext = true;
-        memset(szFileName, 0, sizeof(szFileName));
-    }
-    bool isInvalid;         // 是否有效
-    bool isDirectory;       // 是否为目录
-    bool hasNext;           // 是否还有后续
-    char szFileName[256];   // 文件名
-}FILEINFO, *PFILEINFO;
+
 void Dump(BYTE* pData, size_t nSize) {
     std::string strOut;
     for (size_t i = 0; i < nSize; i++) {
@@ -56,7 +45,7 @@ int MakeDriverInfo() {
     }
     CPacket pack(1, (BYTE*)result.c_str(), result.size());
     Dump((BYTE*)pack.Data(), pack.Size());
-    // CServerSocket::getInstance()->Send(pack);
+    CServerSocket::getInstance()->Send(pack);
     return 0;
 }
 
@@ -69,31 +58,31 @@ int MakeDirectoryInfo() {
     }
     if (_chdir(filePath.c_str()) != 0) {  // 切换到输入路径判断该路径是否存在
         FILEINFO finfo;
-        finfo.isInvalid = true;
-        finfo.isDirectory = true;
         finfo.hasNext = false;
-        memcpy(finfo.szFileName, filePath.c_str(), filePath.length());
         CPacket pack(2, (BYTE*)&finfo, sizeof(finfo));
         CServerSocket::getInstance()->Send(pack);
-       // listFileInfo.push_back(finfo);
         OutputDebugString(_T("没有权限访问目录"));
         return -2;
     }
     _finddata_t fdata;
-    int hfind = 0;
-    if ((hfind = _findfirst("*", &fdata)) == -1) {// 获取当前文件节
+    intptr_t  hfind;
+    if ((hfind = _findfirst("*", &fdata)) == -1L) {// 获取当前文件
 		OutputDebugString(_T("没有找到任何文件"));
+		FILEINFO finfo;
+		finfo.hasNext = false;
+		CPacket pack(2, (BYTE*)&finfo, sizeof(finfo));
+		CServerSocket::getInstance()->Send(pack);
 		return -3;
     }
     do {
         FILEINFO finfo;
         finfo.isDirectory = (fdata.attrib & _A_SUBDIR) != 0;
         memcpy(finfo.szFileName, fdata.name, strlen(fdata.name));
+        TRACE("szFileName=%s\r\n", finfo.szFileName);
 		CPacket pack(2, (BYTE*)&finfo, sizeof(finfo));
 		CServerSocket::getInstance()->Send(pack);
-        //listFileInfo.push_back(finfo);
-
-    } while (!_findnext(hfind,&fdata)); // 获取下一个文件节点
+    } while (_findnext(hfind,&fdata)==0); // 获取下一个文件节点
+    _findclose(hfind);
     // 通过以上两个函数配合，从盘符开始，通过do...while() 循环可得到遍历文件
     // 发送信息到控制端
     FILEINFO finfo;
@@ -404,7 +393,7 @@ int main()
                 if (ret > 0) {
                     ret = ExcuteCommand(ret);
                     if (ret != 0) {
-                        TRACE("执行命令失败，%d, ret=%d", pServer->GetPacket().sCmd, ret);
+                        TRACE("执行命令失败，%d, ret=%d\r\n", pServer->GetPacket().sCmd, ret);
                     }
                     pServer->CloseClient(); // 采用短连接方式
                     TRACE("clinet closed\r\n");

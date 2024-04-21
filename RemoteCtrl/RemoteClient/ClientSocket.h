@@ -102,7 +102,6 @@ public:
 		memcpy(pData, strData.c_str(), strData.size());
 		pData += strData.size();
 		*(WORD*)pData = sSUm;
-
 		return strOut.c_str();
 	}
 
@@ -129,6 +128,19 @@ typedef struct MouseEvent {
 	POINT ptXY;		// 坐标
 }MOUSEEV, * PMOUSEEV;
 
+typedef struct file_info {
+	file_info() {
+		isInvalid = false;
+		isDirectory = -1;
+		hasNext = true;
+		memset(szFileName, 0, sizeof(szFileName));
+	}
+	bool isInvalid;         // 是否有效
+	int isDirectory;       // 是否为目录
+	bool hasNext;           // 是否还有后续
+	char szFileName[256];   // 文件名
+}FILEINFO, * PFILEINFO;
+
 std::string GetErrInfo(int WSAErrCode);
 class CClientSocket
 {
@@ -139,15 +151,15 @@ public:
 		}
 		return mInstance;
 	}
-	bool InitSocket(const std::string& strIp) {
+	bool InitSocket(int nIp, int nPort) {
 		if (m_sock != INVALID_SOCKET) CloseSocket();
 		m_sock = socket(PF_INET, SOCK_STREAM, 0);
 		if (m_sock == -1) return false;
 		sockaddr_in serv_addr;
 		memset(&serv_addr, 0, sizeof(serv_addr));
 		serv_addr.sin_family = AF_INET;
-		serv_addr.sin_addr.s_addr = inet_addr(strIp.c_str());
-		serv_addr.sin_port = htons(9527);
+		serv_addr.sin_addr.s_addr = htonl(nIp);
+		serv_addr.sin_port = htons(nPort);
 
 		if (serv_addr.sin_addr.s_addr == INADDR_NONE) {
 			AfxMessageBox("指定IP不存在");
@@ -169,12 +181,13 @@ public:
 		size_t index = 0;
 		while (true) {
 			size_t len = recv(m_sock, buffer + index, BUFFER_SIZE - index, 0);
-			if (len <= 0) return -1;
+			if ((int)len <= 0) return -1;
 			index += len;
 			len = index;
 			m_packet = CPacket((BYTE*)buffer, len);
+			TRACE("command = %d\r\n", m_packet.sCmd);
 			if (len > 0) {
-				memmove(buffer, buffer + len, BUFFER_SIZE - len);
+				memmove(buffer, buffer + len, index - len);
 				index -= len;
 				return m_packet.sCmd;
 			}
