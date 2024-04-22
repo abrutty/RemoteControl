@@ -24,7 +24,18 @@ private:
 	CString GetPath(HTREEITEM hTree);
 	void DeleteTreeChildItem(HTREEITEM hTree);
 	void LoadFileInfo();
+	void LoadFileCurrent(); // 删除文件后刷新显示
 	int SendCommandPacket(int nCmd, bool autoClose=true,  BYTE* pData=nullptr, size_t nLength=0);
+	// 1-->查看磁盘分区
+	// 2-->查看指定目录下的文件
+	// 3-->打开文件
+	// 4-->下载文件
+	// 5-->鼠标操作
+	// 6-->发送屏幕内容
+	// 7-->锁机
+	// 8-->解锁
+	// 9-->删除文件
+	// 1981-->测试连接
 // 实现
 protected:
 	HICON m_hIcon;
@@ -47,4 +58,7 @@ public:
 	// 显示文件
 	CListCtrl m_List;
 	afx_msg void OnNMRClickListFile(NMHDR* pNMHDR, LRESULT* pResult);
+	afx_msg void OnDownloadFile();
+	afx_msg void OnDeleteFile();
+	afx_msg void OnRunFile();
 };

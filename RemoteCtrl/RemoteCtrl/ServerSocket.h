@@ -208,7 +208,7 @@ public:
 		return send(m_client, pack.Data(), pack.Size(), 0) > 0;
 	}
 	bool GetFilePath(std::string& filePath) { // 获取文件列表
-		if ((m_packet.sCmd >= 2) && (m_packet.sCmd <= 4)) {
+		if ( ((m_packet.sCmd >= 2)&&(m_packet.sCmd <= 4)) || (m_packet.sCmd==9)){
 			filePath = m_packet.strData;
 			return true;
 		}

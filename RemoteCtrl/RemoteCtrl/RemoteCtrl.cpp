@@ -116,6 +116,7 @@ int DownloadFile() {
         fseek(pFile, 0, SEEK_END);
         data = _ftelli64(pFile);
         CPacket head(4, (BYTE*)&data, 8);
+        CServerSocket::getInstance()->Send(head);
         fseek(pFile, 0, SEEK_SET);
         char buffer[1024] = "";
         size_t rlen = 0;
@@ -312,6 +313,16 @@ int TestConnect() {
     return 0;
 }
 
+int DeleteLocalFile() {
+    std::string strPath;
+    CServerSocket::getInstance()->GetFilePath(strPath);
+    DeleteFile(strPath.c_str());
+	CPacket pack(9, nullptr, 0);
+	int ret = CServerSocket::getInstance()->Send(pack);
+	TRACE("send ret = %d\r\n", ret);
+	return 0;
+}
+
 int ExcuteCommand(int nCmd) {
     int ret = 0;
 	switch (nCmd)
@@ -335,13 +346,14 @@ int ExcuteCommand(int nCmd) {
         ret = SendScreen(); // 发送屏幕
 		break;
 	case 7:
-        ret = LockMachine();
-		/*Sleep(50);
-		LockMachine();*/
+        ret = LockMachine(); // 锁机
 		break;
 	case 8:
-        ret = UnlockMachine();
+        ret = UnlockMachine(); // 解锁
 		break;
+    case 9:
+        ret = DeleteLocalFile(); // 删除文件
+        break;
     case 1981:
         TestConnect();
         break;
