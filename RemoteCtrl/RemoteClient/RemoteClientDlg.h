@@ -4,6 +4,10 @@
 
 #pragma once
 #include "ClientSocket.h"
+#include "StatusDlg.h"
+
+#define WM_SEND_PACKET (WM_USER+1) // 自定义发送数据包的消息，为了解决线程校验通不过的问题，因为在子线程去处理下载文件
+// 1.自定义消息--->2.自定义消息响应函数--->3.注册消息--->4.实现消息函数
 
 // CRemoteClientDlg 对话框
 class CRemoteClientDlg : public CDialogEx
@@ -21,6 +25,8 @@ public:
 	virtual void DoDataExchange(CDataExchange* pDX);	// DDX/DDV 支持
 
 private:
+	static void ThreadEntryForDownFile(void *arg); // 下载大文件的线程入口函数
+	void ThreadDownFile();
 	CString GetPath(HTREEITEM hTree);
 	void DeleteTreeChildItem(HTREEITEM hTree);
 	void LoadFileInfo();
@@ -39,6 +45,7 @@ private:
 // 实现
 protected:
 	HICON m_hIcon;
+	CStatusDlg m_dlgStatus;
 
 	// 生成的消息映射函数
 	virtual BOOL OnInitDialog();
@@ -61,4 +68,5 @@ public:
 	afx_msg void OnDownloadFile();
 	afx_msg void OnDeleteFile();
 	afx_msg void OnRunFile();
+	afx_msg LRESULT OnSendPacket(WPARAM wParam, LPARAM lParam); // 自定义消息响应函数
 };
