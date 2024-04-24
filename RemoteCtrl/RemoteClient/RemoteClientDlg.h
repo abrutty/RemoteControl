@@ -23,8 +23,19 @@ public:
 
 	protected:
 	virtual void DoDataExchange(CDataExchange* pDX);	// DDX/DDV 支持
-
+public:
+	bool isFull() const {
+		return m_isFull;
+	}
+	CImage& GetImage() {
+		return m_image;
+	}
 private:
+	CImage m_image; // 缓存
+	bool m_isFull; // 缓存是否有数据，true有，false没有
+private:
+	static void ThreadEntryForWatchData(void* arg); // 静态函数不能使用this指针，此函数可以专注于线程框架
+	void ThreadWatchData();	// 可以使用this指针，专注于处理逻辑
 	static void ThreadEntryForDownFile(void *arg); // 下载大文件的线程入口函数
 	void ThreadDownFile();
 	CString GetPath(HTREEITEM hTree);
@@ -69,4 +80,6 @@ public:
 	afx_msg void OnDeleteFile();
 	afx_msg void OnRunFile();
 	afx_msg LRESULT OnSendPacket(WPARAM wParam, LPARAM lParam); // 自定义消息响应函数
+	afx_msg void OnBnClickedBtnStartWatch();
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
 };

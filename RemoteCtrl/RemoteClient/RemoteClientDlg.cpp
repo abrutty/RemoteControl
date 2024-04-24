@@ -11,6 +11,7 @@
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
+#include "CWatchDialog.h"
 
 
 // 用于应用程序“关于”菜单项的 CAboutDlg 对话框
@@ -101,6 +102,8 @@ BEGIN_MESSAGE_MAP(CRemoteClientDlg, CDialogEx)
 	ON_COMMAND(ID_DELETE_FILE, &CRemoteClientDlg::OnDeleteFile)
 	ON_COMMAND(ID_RUN_FILE, &CRemoteClientDlg::OnRunFile)
 	ON_MESSAGE(WM_SEND_PACKET, &CRemoteClientDlg::OnSendPacket) // 注册自定义消息（告诉系统 该消息对应的响应函数）
+	ON_BN_CLICKED(IDC_BTN_START_WATCH, &CRemoteClientDlg::OnBnClickedBtnStartWatch)
+	ON_WM_TIMER()
 END_MESSAGE_MAP()
 
 
@@ -142,7 +145,7 @@ BOOL CRemoteClientDlg::OnInitDialog()
 	UpdateData(FALSE);
 	m_dlgStatus.Create(IDD_DLG_STATUS, this);
 	m_dlgStatus.ShowWindow(SW_HIDE);
-
+	m_isFull = false; // 最开始没有缓存数据
 	return TRUE;  // 除非将焦点设置到控件，否则返回 TRUE
 }
 
@@ -236,6 +239,54 @@ void CRemoteClientDlg::OnBnClickedBtnFileinfo()
 	dr += ":";
 	HTREEITEM hTemp = m_Tree.InsertItem(dr.c_str(), TVI_ROOT, TVI_LAST);
 	m_Tree.InsertItem("", hTemp, TVI_LAST);
+}
+
+void CRemoteClientDlg::ThreadEntryForWatchData(void* arg)
+{
+	CRemoteClientDlg* thiz = (CRemoteClientDlg*)arg;
+	thiz->ThreadWatchData();
+	_endthread();
+}
+
+void CRemoteClientDlg::ThreadWatchData()
+{
+	CClientSocket* pClient = nullptr;
+	do {
+		pClient = CClientSocket::getInstance();
+	} 
+	while (pClient==nullptr);
+	for (;;) // 相当于while(true)
+	{
+		CPacket pack(6, nullptr, 0);
+		bool ret = pClient->Send(pack);
+		if (ret == true) {
+			int cmd = pClient->DealCommand(); // 拿数据
+			if (cmd == 6) {
+				if (m_isFull == false) { // 更新数据到缓存
+					BYTE* pData = (BYTE*)pClient->GetPacket().strData.c_str();
+					HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, 0);
+					if (hMem == nullptr) {
+						TRACE("内存不足\r\n");
+						Sleep(1);
+						continue;
+					}
+					IStream* pStream = nullptr;
+					HRESULT hRet = CreateStreamOnHGlobal(hMem, true, &pStream);
+					if (hRet == S_OK) {
+						ULONG length = 0;
+						pStream->Write(pData, pClient->GetPacket().strData.size(), &length);
+						LARGE_INTEGER bg = { 0 };
+						pStream->Seek(bg, STREAM_SEEK_SET, nullptr);
+						m_image.Load(pStream);
+						m_isFull = true;
+					}
+				}
+			}
+		}
+		else {
+			Sleep(1); // 发送失败休眠1ms，避免死机
+		}
+	}
 }
 
 void CRemoteClientDlg::ThreadEntryForDownFile(void* arg)
@@ -472,4 +523,20 @@ LRESULT CRemoteClientDlg::OnSendPacket(WPARAM wParam, LPARAM lParam)
 	CString strFile = (LPCTSTR)lParam;
 	int ret = SendCommandPacket(wParam >> 1, wParam & 1, (BYTE*)(LPCTSTR)strFile, strFile.GetLength());
 	return ret;
+}
+
+
+void CRemoteClientDlg::OnBnClickedBtnStartWatch()
+{
+	_beginthread(CRemoteClientDlg::ThreadEntryForWatchData, 0, this);
+	CWatchDialog dlg(this);
+	dlg.DoModal();
+}
+
+
+void CRemoteClientDlg::OnTimer(UINT_PTR nIDEvent)
+{
+	// TODO: 在此添加消息处理程序代码和/或调用默认值
+
+	CDialogEx::OnTimer(nIDEvent);
 }
