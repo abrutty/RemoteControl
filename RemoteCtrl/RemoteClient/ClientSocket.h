@@ -5,7 +5,7 @@
 
 #include <string>
 #include <vector>
-#define BUFFER_SIZE 4096
+#define BUFFER_SIZE 4096000
 #pragma pack(push)  // 保存当前字节对齐的状态
 #pragma pack(1)	// 强制取消字节对齐，改为连续存放
 class CPacket {

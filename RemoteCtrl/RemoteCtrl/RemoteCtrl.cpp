@@ -234,7 +234,7 @@ int SendScreen() {
     int nWidth = GetDeviceCaps(hScreen, HORZRES);
     int nHeight = GetDeviceCaps(hScreen, VERTRES);
     screen.Create(nWidth, nHeight, nBitPerPixel);   // 创建屏幕
-    BitBlt(screen.GetDC(), 0, 0, 1920, 1020, hScreen, 0, 0, SRCCOPY);   // 把图像复制到屏幕中
+    BitBlt(screen.GetDC(), 0, 0, nWidth, nHeight, hScreen, 0, 0, SRCCOPY);   // 把图像复制到屏幕中
     ReleaseDC(nullptr, hScreen);
 
     HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, 0);   // 在内存中分配一个全局的堆
@@ -243,7 +243,7 @@ int SendScreen() {
     HRESULT ret = CreateStreamOnHGlobal(hMem, TRUE, &pStream);  // 在全局对象上设置内存流
     if (ret == S_OK) {
         screen.Save(pStream, Gdiplus::ImageFormatPNG);  // 保存图像到内存流中
-        //screen.Save(_T("test.png"), Gdiplus::ImageFormatPNG);   // 保存图像到文件
+        //screen.Save(_T("test1.png"), Gdiplus::ImageFormatPNG);   // 保存图像到文件
         LARGE_INTEGER begin = { 0 };
         pStream->Seek(begin, STREAM_SEEK_SET, nullptr); // 保存后，将流指针恢复到开头
         PBYTE pData = (PBYTE)GlobalLock(hMem);  // 上锁，读取数据
