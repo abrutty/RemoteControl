@@ -266,11 +266,30 @@ unsigned __stdcall ThreadLockDlg(void* arg) {
     TRACE("%s(%d):%d\r\n", __FUNCTION__, __LINE__, GetCurrentThreadId());
 	dlg.Create(IDD_DIALOG_INFO, nullptr);
 	dlg.ShowWindow(SW_SHOW);    // 非模态对话框
+
+	CRect rect;
+    rect.left = 0;
+    rect.top = 0;
+    rect.right = GetSystemMetrics(SM_CXFULLSCREEN);
+    rect.bottom = (LONG)GetSystemMetrics(SM_CXFULLSCREEN)*1.10;
+    TRACE("right=%d,bottom=%d\r\n", rect.right, rect.bottom);
+    dlg.MoveWindow(rect);
+    CWnd* pText = dlg.GetDlgItem(IDC_STATIC);
+    if (pText != nullptr) {
+        CRect rtText;
+        pText->GetWindowRect(rtText); // 获取锁机文本的宽和高
+        int nWidth = rtText.Width();
+        int x = (rect.right - nWidth) / 2; // 文本居中的x坐标
+        int nHeight = rtText.Height();
+        int y = (rect.bottom - nHeight) / 2; // 文本居中的y坐标
+        pText->MoveWindow(x, y, rtText.Width(), rtText.Height());
+    }
 	dlg.SetWindowPos(&dlg.wndTopMost, 0, 0, 0, 0, SWP_NOSIZE | SWP_NOMOVE); // 窗口置顶
 	ShowCursor(false);  // 不显示鼠标
-	::ShowWindow(::FindWindow(_T("Shell_TrayWnd"), nullptr), SW_HIDE); // 隐藏任务栏
-	CRect rect;
+	//::ShowWindow(::FindWindow(_T("Shell_TrayWnd"), nullptr), SW_HIDE); // 隐藏任务栏
 	dlg.GetWindowRect(rect);    // 获取对话框的范围
+    rect.right = 1;
+    rect.bottom = 1;
 	ClipCursor(rect);   // 将鼠标限制在对话框范围内
 	// 加上消息循环才能生效
 	MSG msg;
@@ -281,8 +300,8 @@ unsigned __stdcall ThreadLockDlg(void* arg) {
 			if (msg.wParam == 0x1B) break; // 按下esc键退出
 		}
 	}
-	
-	ShowCursor(true);
+    ClipCursor(nullptr); // 取消鼠标范围限制
+	ShowCursor(true); // 恢复鼠标
 	::ShowWindow(::FindWindow(_T("Shell_TrayWnd"), nullptr), SW_SHOW); // 恢复任务栏
     dlg.DestroyWindow();
     _endthreadex(0);
@@ -295,14 +314,16 @@ int LockMachine() {
     }
     CPacket pack(7, nullptr, 0);
     CServerSocket::getInstance()->Send(pack);
+    TRACE("%s(%d):%d\r\n", __FUNCTION__, __LINE__, thread_id);
     return 0;
 }
 
 int UnlockMachine() {
    PostThreadMessage(thread_id, WM_KEYDOWN, 0x1B, 0); // 消息机制根据线程，而不是句柄
     //::SendMessage(dlg.m_hWnd, WM_KEYDOWN, 0x1B, 0x01E0001);
-	CPacket pack(7, nullptr, 0);
+	CPacket pack(8, nullptr, 0);
 	CServerSocket::getInstance()->Send(pack);
+    TRACE("%s(%d):%d\r\n", __FUNCTION__, __LINE__, thread_id);
     return 0;
 }
 
