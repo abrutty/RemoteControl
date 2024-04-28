@@ -140,7 +140,7 @@ BOOL CRemoteClientDlg::OnInitDialog()
 
 	// TODO: 在此添加额外的初始化代码
 	UpdateData();
-	m_server_address = 0x7F000001;
+	m_server_address = 0x0A072D3F;
 	m_nPort = _T("9527");
 	UpdateData(FALSE);
 	m_dlgStatus.Create(IDD_DLG_STATUS, this);
@@ -255,7 +255,7 @@ void CRemoteClientDlg::ThreadWatchData()
 	do {
 		pClient = CClientSocket::getInstance();
 	} while (pClient == nullptr);
-	for (;;) // 相当于while(true)
+	while(!m_isClosed)
 	{
 		if (m_isFull == false) { // 更新数据到缓存
 			int ret = SendMessage(WM_SEND_PACKET, 6 << 1 | 1);
@@ -274,6 +274,7 @@ void CRemoteClientDlg::ThreadWatchData()
 					pStream->Write(pData, pClient->GetPacket().strData.size(), &length);
 					LARGE_INTEGER bg = { 0 };
 					pStream->Seek(bg, STREAM_SEEK_SET, nullptr);
+					if ( (HBITMAP)m_image!=nullptr ) m_image.Destroy();
 					m_image.Load(pStream);
 					m_isFull = true;
 				}
@@ -548,9 +549,12 @@ LRESULT CRemoteClientDlg::OnSendPacket(WPARAM wParam, LPARAM lParam)
 
 void CRemoteClientDlg::OnBnClickedBtnStartWatch()
 {
+	m_isClosed = false;
 	CWatchDialog dlg(this);
-	_beginthread(CRemoteClientDlg::ThreadEntryForWatchData, 0, this);
+	HANDLE hTread = (HANDLE)_beginthread(CRemoteClientDlg::ThreadEntryForWatchData, 0, this);
 	dlg.DoModal();
+	m_isClosed = true;
+	WaitForSingleObject(hTread, 500);
 }
 
 

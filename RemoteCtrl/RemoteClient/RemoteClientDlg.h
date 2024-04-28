@@ -36,6 +36,8 @@ public:
 private:
 	CImage m_image; // 缓存
 	bool m_isFull; // 缓存是否有数据，true有，false没有
+	bool m_isClosed; // 监视是否关闭远程控制对话框   第一次点开始监控按钮，然后关闭监控对话框，第二次点监控按钮就会出问题
+	//因为点一次按钮就开一次线程，点两次就开了两个线程，两个线程都将屏幕存到同一个image
 private:
 	static void ThreadEntryForWatchData(void* arg); // 静态函数不能使用this指针，此函数可以专注于线程框架
 	void ThreadWatchData();	// 可以使用this指针，专注于处理逻辑
