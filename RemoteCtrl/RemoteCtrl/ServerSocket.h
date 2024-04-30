@@ -233,7 +233,7 @@ private:
 	CPacket m_packet;
 	// 单例模式，保证整个系统周期内只产生一个实例，所以将构造和析构设为私有，禁止外部构造和析构
 	// 将构造和析构函数设为私有，避免外部控制
-	CServerSocket& operator=(const CServerSocket&& ss) {}
+	CServerSocket& operator=(const CServerSocket& ss) {}
 	CServerSocket(const CServerSocket& ss) {
 		m_sock = ss.m_sock;
 		m_client = ss.m_client;
