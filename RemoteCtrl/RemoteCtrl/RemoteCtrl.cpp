@@ -36,32 +36,17 @@ int main()
         {
             // TODO: 在此处为应用程序的行为编写代码。
             CCommand cmd;
-            CServerSocket* pServer = CServerSocket::getInstance();
-            int count = 0;
-            if (pServer->InitSocket() == false) {
-                MessageBox(nullptr, _T("网络初始化异常"), _T("网络初始化失败"), MB_OK|MB_ICONERROR);
-                exit(0);
-            }
-            while (CServerSocket::getInstance()!=nullptr) {
-                if (pServer->AcceptClient() == false) {
-                    if (count >= 3) {
-                        MessageBox(nullptr, _T("多次无法接入用户"), _T("接入用户失败"), MB_OK | MB_ICONERROR);
-                        exit(0);
-                    }
-                    MessageBox(nullptr, _T("无法接入用户，自动重试"), _T("接入用户失败"), MB_OK | MB_ICONERROR);
-                }
-                TRACE("accept client true\r\n");
-                int ret = pServer->DealCommand();
-                TRACE("Sever DealCommand ret = %d\r\n", ret);
-                if (ret > 0) {
-                    ret = cmd.ExcuteCommand(ret);
-                    if (ret != 0) {
-                        TRACE("执行命令失败，%d, ret=%d\r\n", pServer->GetPacket().sCmd, ret);
-                    }
-                    pServer->CloseClient(); // 采用短连接方式
-                    TRACE("clinet closed\r\n");
-                }
-                
+            int ret = CServerSocket::getInstance()->Run(&CCommand::RunCommand, &cmd);
+            switch (ret) {
+            case -1:
+				MessageBox(nullptr, _T("网络初始化异常"), _T("网络初始化失败"), MB_OK | MB_ICONERROR);
+				exit(0);
+                break;
+            case -2:
+				MessageBox(nullptr, _T("多次无法接入用户"), _T("接入用户失败"), MB_OK | MB_ICONERROR);
+				exit(0);
+                break;
+
             }
         }
     }

@@ -1,143 +1,13 @@
 #pragma once
 #include "pch.h"
 #include "framework.h"
-void Dump(BYTE* pData, size_t nSize);
+#include <list>
+#include "Packet.h"
+
 #define BUFFER_SIZE 4096000
-#pragma pack(push)  // 保存当前字节对齐的状态
-#pragma pack(1)	// 强制取消字节对齐，改为连续存放
-class CPacket {
-public:
-	CPacket() :sHead(0), nLength(0), sCmd(0), sSUm(0) {}
-	// 打包构造
-	CPacket(WORD sCmd, const BYTE* pData, size_t nSize){
-		this->sHead = 0xFEFF;
-		this->nLength = nSize + 4;	// 数据长度+sCmd长度(2)+sSum长度(2)
-		this->sCmd = sCmd;
-		if (nSize > 0) {
-			this->strData.resize(nSize);
-			memcpy((void*)strData.c_str(), pData, nSize);
-		}
-		else {
-			this->strData.clear();
-		}
-		
-		this->sSUm = 0;
-		for (size_t j = 0; j < strData.size(); j++) { // 进行和校验
-			this->sSUm += BYTE(strData[j]) & 0xFF;
-		}
-	}
-	CPacket(const CPacket& pack) {
-		sHead = pack.sHead;
-		nLength = pack.nLength;
-		sCmd = pack.sCmd;
-		strData = pack.strData;
-		sSUm = pack.sSUm;
-	}
-	CPacket& operator=(const CPacket& pack) {
-		if (this != &pack) {
-			sHead = pack.sHead;
-			nLength = pack.nLength;
-			sCmd = pack.sCmd;
-			strData = pack.strData;
-			sSUm = pack.sSUm;
-		}
-		return *this;
-	}
-	// 解包构造函数
-	CPacket(const BYTE* pData, size_t& nSize) {
-		size_t i = 0;	// i始终指向已读到数据最新的位置
-		for (; i < nSize; i++) {
-			if ( *(WORD*)(pData + i) == 0xFEFF ) {
-				sHead = *(WORD*)(pData + i); // 找到包头
-				i += 2;	// 防止只有包头FEFF，占两个字节，但没有数据
-				break;
-			}
-		}
-		if (i+4+2+2 > nSize) {// 包数据可能不全，或包头未全部接收到，解析失败  +nLength +sCmd +sSum
-			nSize = 0;
-			return;
-		}
-
-		nLength = *(DWORD*)(pData + i);
-		i += 4;
-		if (nLength + i > nSize) { // 包没有完全接收到，比如只收到一半，解析失败
-			nSize = 0;
-			return;
-		}
-
-		sCmd = *(WORD*)(pData + i);
-		i += 2;
-		if (nLength > 4) {
-			strData.resize(nLength - 2 - 2); // 减去sCmd和sSum的长度
-			memcpy((void*)strData.c_str(), pData + i, nLength - 4); //c_str()把string 对象转换成c中的字符串样式
-			i += nLength - 4;
-		}
-
-		sSUm = *(WORD*)(pData + i);
-		i += 2;
-		WORD sum = 0;
-		for (size_t j = 0; j < strData.size(); j++) { // 进行和校验
-			sum += BYTE(strData[j]) & 0xFF;
-		}
-		if (sum == sSUm) {
-			nSize = i; //  head(2字节）nLength(4字节)data...
-			return;
-		}
-		nSize = 0;
-	}
-	~CPacket() {}
-	int Size() { return nLength + 6; } // 数据包的大小
-	const char* Data() {
-		strOut.resize(nLength + 6);
-		BYTE* pData = (BYTE*)strOut.c_str();
-		*(WORD*)pData = sHead;
-		pData += 2;
-		*(DWORD*)pData = nLength;
-		pData += 4;
-		*(WORD*)pData = sCmd;
-		pData += 2;
-		memcpy(pData, strData.c_str(), strData.size());
-		pData += strData.size();
-		*(WORD*)pData = sSUm;
-
-		return strOut.c_str();
-	}
-
-public:
-	WORD sHead;				// 包头，固定位，0xFEFF
-	DWORD nLength;			// 包长度，从控制命令开始，到和校验结束
-	WORD sCmd;				// 控制命令
-	std::string strData;	// 包数据
-	WORD sSUm;				// 和校验
-	std::string strOut;		// 整个包的数据
-};
-#pragma pack(pop)	// 还原字节对齐
 
 
-typedef struct MouseEvent{
-	MouseEvent() {
-		nAction = 0;
-		nButton = -1;
-		ptXY.x = 0;
-		ptXY.y = 0;
-	}
-	WORD nAction;	// 点击、移动、双击
-	WORD nButton;	// 左键、右键、中键
-	POINT ptXY;		// 坐标
-}MOUSEEV, *PMOUSEEV;
-
-typedef struct file_info {
-	file_info() {
-		isInvalid = false;
-		isDirectory = -1;
-		hasNext = true;
-		memset(szFileName, 0, sizeof(szFileName));
-	}
-	bool isInvalid;         // 是否有效
-	int isDirectory;       // 是否为目录
-	bool hasNext;           // 是否还有后续
-	char szFileName[256];   // 文件名
-}FILEINFO, * PFILEINFO;
+typedef void(*SOCKET_CALLBACK)(void* arg, int status, std::list<CPacket>& lstPacket, CPacket& inPacket);
 
 class CServerSocket
 {
@@ -148,13 +18,39 @@ public:
 		}
 		return mInstance;
 	}
-	bool InitSocket() {
+	
+	int Run(SOCKET_CALLBACK callback, void* arg, short port=9527) {
+		bool ret = InitSocket(port);
+		if (ret == false) return -1;
+		std::list<CPacket> lstPackets;
+		m_callback = callback;
+		m_arg = arg;
+		int count = 0;
+		while (true) {
+			if (AcceptClient() == false) {
+				if (count >= 3) return -2;
+				count++;
+			}
+			int ret = DealCommand();
+			if (ret > 0) {
+				m_callback(m_arg, ret, lstPackets, m_packet);
+				while (lstPackets.size() > 0) {
+					Send(lstPackets.front());
+					lstPackets.pop_front();
+				}
+			}
+			CloseClient();
+		}
+		
+	}
+protected:
+	bool InitSocket(short port) {
 		if (m_sock == -1) return false;
 		sockaddr_in serv_addr;
 		memset(&serv_addr, 0, sizeof(serv_addr));
 		serv_addr.sin_family = AF_INET;
 		serv_addr.sin_addr.s_addr = INADDR_ANY;
-		serv_addr.sin_port = htons(9527);
+		serv_addr.sin_port = htons(port);
 
 		if (bind(m_sock, (sockaddr*)&serv_addr, sizeof(serv_addr)) == -1) return false;
 		if (listen(m_sock, 1) == -1) return false;
@@ -225,10 +121,14 @@ public:
 		return m_packet;
 	}
 	void CloseClient() {
-		closesocket(m_client);
-		m_client = INVALID_SOCKET;
+		if (m_client != INVALID_SOCKET) {
+			closesocket(m_client);
+			m_client = INVALID_SOCKET;
+		}
 	}
 private:
+	SOCKET_CALLBACK m_callback;
+	void* m_arg;
 	SOCKET m_sock, m_client;
 	CPacket m_packet;
 	// 单例模式，保证整个系统周期内只产生一个实例，所以将构造和析构设为私有，禁止外部构造和析构
