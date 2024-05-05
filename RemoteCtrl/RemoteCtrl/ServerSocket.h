@@ -80,13 +80,14 @@ protected:
 				delete[] buffer;
 				return -1;
 			}
-			TRACE("server recv: %d\r\n", len);
+			TRACE("server recv: %d	index= %d\r\n", len, index);
 			index += len;
 			len = index;
 			m_packet = CPacket((BYTE*)buffer, len);
 			if (len > 0) {
 				memmove(buffer, buffer + len, BUFFER_SIZE - len);
 				index -= len;
+				TRACE("index= %d, len=%d\r\n", index, len);
 				delete[] buffer;
 				return m_packet.sCmd;
 			}
@@ -103,23 +104,23 @@ protected:
 		//Dump((BYTE*)pack.Data(), pack.Size());
 		return send(m_client, pack.Data(), pack.Size(), 0) > 0;
 	}
-	bool GetFilePath(std::string& filePath) { // 获取文件列表
-		if ( ((m_packet.sCmd >= 2)&&(m_packet.sCmd <= 4)) || (m_packet.sCmd==9)){
-			filePath = m_packet.strData;
-			return true;
-		}
-		return false;
-	}
-	bool GetMouseEvent(MOUSEEV& mouse) {
+	//bool GetFilePath(std::string& filePath) { // 获取文件列表
+	//	if ( ((m_packet.sCmd >= 2)&&(m_packet.sCmd <= 4)) || (m_packet.sCmd==9)){
+	//		filePath = m_packet.strData;
+	//		return true;
+	//	}
+	//	return false;
+	//}
+	/*bool GetMouseEvent(MOUSEEV& mouse) {
 		if (m_packet.sCmd == 5) {
 			memcpy(&mouse, m_packet.strData.c_str(), sizeof(mouse));
 			return true;
 		}
 		return false;
-	}
-	CPacket& GetPacket() {
+	}*/
+	/*CPacket& GetPacket() {
 		return m_packet;
-	}
+	}*/
 	void CloseClient() {
 		if (m_client != INVALID_SOCKET) {
 			closesocket(m_client);

@@ -94,23 +94,25 @@ protected:
 		FILE* pFile = nullptr;
 		errno_t err = fopen_s(&pFile, filePath.c_str(), "rb"); // 用fopen会报warning，或者使用fopen，禁用warning
 		if (err != 0) {
-			lstPacket.emplace_back(CPacket(4, (BYTE*)data, 8));
+			lstPacket.emplace_back(CPacket(4, (BYTE*)&data, 8));
 			return -1;
 		}
 		if (pFile != nullptr) {
 			fseek(pFile, 0, SEEK_END);
 			data = _ftelli64(pFile);
-			lstPacket.emplace_back(CPacket(4, (BYTE*)data, 8));
+			lstPacket.emplace_back(CPacket(4, (BYTE*)&data, 8));
 			fseek(pFile, 0, SEEK_SET);
 			char buffer[1024] = "";
 			size_t rlen = 0;
 			do {
 				rlen = fread(buffer, 1, 1024, pFile);
-				lstPacket.emplace_back(CPacket(4, (BYTE*)data, 8));
+				lstPacket.emplace_back(CPacket(4, (BYTE*)buffer, rlen));
 			} while (rlen >= 1024); // <1024说明读到文件尾        
 			fclose(pFile);
 		}
-		lstPacket.emplace_back(CPacket(4, (BYTE*)data, 8));
+		else {
+			lstPacket.emplace_back(CPacket(4, (BYTE*)&data, 8));
+		}
 		return 0;
 	}
 

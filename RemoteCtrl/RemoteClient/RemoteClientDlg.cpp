@@ -80,7 +80,7 @@ int CRemoteClientDlg::SendCommandPacket(int nCmd, bool autoClose, BYTE* pData, s
 	}
 	CPacket pack(nCmd, pData, nLength);
 	ret = pClient->Send(pack);
-	TRACE("client send ret = %d\r\n", ret);
+	TRACE("client send ret = %d, command=%d\r\n", ret, nCmd);
 	int cmd = pClient->DealCommand();
 	TRACE("ACK=%d\r\n", cmd);
 	if (autoClose == true)
@@ -237,9 +237,11 @@ void CRemoteClientDlg::OnBnClickedBtnFileinfo()
 		}
 		dr += drivers[i];
 	}
-	dr += ":";
-	HTREEITEM hTemp = m_Tree.InsertItem(dr.c_str(), TVI_ROOT, TVI_LAST);
-	m_Tree.InsertItem("", hTemp, TVI_LAST);
+	if (dr.size() > 0) {
+		dr += ":";
+		HTREEITEM hTemp = m_Tree.InsertItem(dr.c_str(), TVI_ROOT, TVI_LAST);
+		m_Tree.InsertItem("", hTemp, TVI_LAST);
+	}
 }
 
 void CRemoteClientDlg::ThreadEntryForWatchData(void* arg)

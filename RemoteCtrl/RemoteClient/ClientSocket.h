@@ -181,16 +181,20 @@ public:
 		while (true) {
 			size_t len = recv(m_sock, buffer + index, BUFFER_SIZE - index, 0);
 			if ( (len<=0) && (index<=0) ) return -1;
+			TRACE("index = %d, len=%d\r\n", index, len);
 			index += len;
 			len = index;
 			m_packet = CPacket((BYTE*)buffer, len);
 			TRACE("command = %d\r\n", m_packet.sCmd);
 			if (len > 0) {
+				TRACE("index = %d, len=%d\r\n", index, len);
 				memmove(buffer, buffer + len, index - len);
 				index -= len;
+				
 				return m_packet.sCmd;
 			}
 		}
+		delete[] buffer;
 		return -1;
 	}
 	bool Send(const char* pData, int nSize) {
