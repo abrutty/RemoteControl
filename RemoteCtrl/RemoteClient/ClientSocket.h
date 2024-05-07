@@ -48,7 +48,7 @@ public:
 	}
 	// 解包构造函数
 	CPacket(const BYTE* pData, size_t& nSize) {
-		size_t i = 0;	// i始终指向已读到数据最新的位置
+		size_t i = 0;	// i 始终指向已读到数据最新的位置
 		for (; i < nSize; i++) {
 			if (*(WORD*)(pData + i) == 0xFEFF) {
 				sHead = *(WORD*)(pData + i); // 找到包头
@@ -233,7 +233,7 @@ private:
 	CPacket m_packet;
 	// 单例模式，保证整个系统周期内只产生一个实例，所以将构造和析构设为私有，禁止外部构造和析构
 	// 将构造和析构函数设为私有，避免外部控制
-	CClientSocket& operator=(const CClientSocket&& ss) {}
+	CClientSocket& operator=(const CClientSocket& ss) {}
 	CClientSocket(const CClientSocket& ss) {
 		m_sock = ss.m_sock;
 	}
