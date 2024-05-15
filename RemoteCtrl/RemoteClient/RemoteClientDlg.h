@@ -6,7 +6,7 @@
 #include "ClientSocket.h"
 #include "StatusDlg.h"
 
-#define WM_SEND_PACKET (WM_USER+1) // 自定义发送数据包的消息，为了解决线程校验通不过的问题，因为在子线程去处理下载文件
+//#define WM_SEND_PACKET (WM_USER+1) // 自定义发送数据包的消息，为了解决线程校验通不过的问题，因为在子线程去处理下载文件
 // 1.自定义消息--->2.自定义消息响应函数--->3.注册消息--->4.实现消息函数
 
 // CRemoteClientDlg 对话框
@@ -24,40 +24,20 @@ public:
 protected:
 	virtual void DoDataExchange(CDataExchange* pDX);	// DDX/DDV 支持
 public:
-	bool isFull() const {
-		return m_isFull;
-	}
-	CImage& GetImage() {
-		return m_image;
-	}
-	void SetImageStatus(bool isFull = false) {
-		m_isFull = isFull;
-	}
+	
 private:
-	CImage m_image; // 缓存
-	bool m_isFull; // 缓存是否有数据，true有，false没有
 	bool m_isClosed; // 监视是否关闭远程控制对话框   第一次点开始监控按钮，然后关闭监控对话框，第二次点监控按钮就会出问题
 	//因为点一次按钮就开一次线程，点两次就开了两个线程，两个线程都将屏幕存到同一个image
 private:
-	static void ThreadEntryForWatchData(void* arg); // 静态函数不能使用this指针，此函数可以专注于线程框架
-	void ThreadWatchData();	// 可以使用this指针，专注于处理逻辑
-	static void ThreadEntryForDownFile(void *arg); // 下载大文件的线程入口函数
-	void ThreadDownFile();
+	//static void ThreadEntryForWatchData(void* arg); 
+	//void ThreadWatchData();	
+	//static void ThreadEntryForDownFile(void *arg); // 下载大文件的线程入口函数
+	//void ThreadDownFile();
 	CString GetPath(HTREEITEM hTree);
 	void DeleteTreeChildItem(HTREEITEM hTree);
 	void LoadFileInfo();
 	void LoadFileCurrent(); // 删除文件后刷新显示
-	int SendCommandPacket(int nCmd, bool autoClose=true,  BYTE* pData=nullptr, size_t nLength=0);
-	// 1-->查看磁盘分区
-	// 2-->查看指定目录下的文件
-	// 3-->打开文件
-	// 4-->下载文件
-	// 5-->鼠标操作
-	// 6-->发送屏幕内容
-	// 7-->锁机
-	// 8-->解锁
-	// 9-->删除文件
-	// 1981-->测试连接
+	
 // 实现
 protected:
 	HICON m_hIcon;
@@ -84,7 +64,9 @@ public:
 	afx_msg void OnDownloadFile();
 	afx_msg void OnDeleteFile();
 	afx_msg void OnRunFile();
-	afx_msg LRESULT OnSendPacket(WPARAM wParam, LPARAM lParam); // 自定义消息响应函数
+	//afx_msg LRESULT OnSendPacket(WPARAM wParam, LPARAM lParam); // 自定义消息响应函数
 	afx_msg void OnBnClickedBtnStartWatch();
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
+	afx_msg void OnIpnFieldchangedIpaddressServ(NMHDR* pNMHDR, LRESULT* pResult);
+	afx_msg void OnEnChangeEditPort();
 };

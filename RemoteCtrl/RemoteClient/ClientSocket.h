@@ -5,6 +5,10 @@
 
 #include <string>
 #include <vector>
+#include <list>
+#include <map>
+#include <mutex>
+
 #define BUFFER_SIZE 4096000
 #pragma pack(push)  // 保存当前字节对齐的状态
 #pragma pack(1)	// 强制取消字节对齐，改为连续存放
@@ -12,7 +16,7 @@ class CPacket {
 public:
 	CPacket() :sHead(0), nLength(0), sCmd(0), sSUm(0) {}
 	// 打包构造
-	CPacket(WORD sCmd, const BYTE* pData, size_t nSize) {
+	CPacket(WORD sCmd, const BYTE* pData, size_t nSize, HANDLE hEvent) {
 		this->sHead = 0xFEFF;
 		this->nLength = nSize + 4;	// 数据长度+sCmd长度(2)+sSum长度(2)
 		this->sCmd = sCmd;
@@ -28,6 +32,7 @@ public:
 		for (size_t j = 0; j < strData.size(); j++) { // 进行和校验
 			this->sSUm += BYTE(strData[j]) & 0xFF;
 		}
+		this->hEvent = hEvent;
 	}
 	CPacket(const CPacket& pack) {
 		sHead = pack.sHead;
@@ -35,6 +40,7 @@ public:
 		sCmd = pack.sCmd;
 		strData = pack.strData;
 		sSUm = pack.sSUm;
+		hEvent = pack.hEvent;
 	}
 	CPacket& operator=(const CPacket& pack) {
 		if (this != &pack) {
@@ -43,11 +49,12 @@ public:
 			sCmd = pack.sCmd;
 			strData = pack.strData;
 			sSUm = pack.sSUm;
+			hEvent = hEvent;
 		}
 		return *this;
 	}
 	// 解包构造函数
-	CPacket(const BYTE* pData, size_t& nSize) {
+	CPacket(const BYTE* pData, size_t& nSize) :hEvent(INVALID_HANDLE_VALUE){
 		size_t i = 0;	// i 始终指向已读到数据最新的位置
 		for (; i < nSize; i++) {
 			if (*(WORD*)(pData + i) == 0xFEFF) {
@@ -90,7 +97,7 @@ public:
 	}
 	~CPacket() {}
 	int Size() { return nLength + 6; } // 数据包的大小
-	const char* Data() {
+	const char* Data(std::string& strOut) const{
 		strOut.resize(nLength + 6);
 		BYTE* pData = (BYTE*)strOut.c_str();
 		*(WORD*)pData = sHead;
@@ -111,7 +118,8 @@ public:
 	WORD sCmd;				// 控制命令
 	std::string strData;	// 包数据
 	WORD sSUm;				// 和校验
-	std::string strOut;		// 整个包的数据
+	HANDLE hEvent;
+	//std::string strOut;		// 整个包的数据
 };
 #pragma pack(pop)	// 还原字节对齐
 
@@ -151,15 +159,15 @@ public:
 		}
 		return mInstance;
 	}
-	bool InitSocket(int nIp, int nPort) {
+	bool InitSocket() {
 		if (m_sock != INVALID_SOCKET) CloseSocket();
 		m_sock = socket(PF_INET, SOCK_STREAM, 0);
 		if (m_sock == -1) return false;
 		sockaddr_in serv_addr;
 		memset(&serv_addr, 0, sizeof(serv_addr));
 		serv_addr.sin_family = AF_INET;
-		serv_addr.sin_addr.s_addr = htonl(nIp);
-		serv_addr.sin_port = htons(nPort);
+		serv_addr.sin_addr.s_addr = htonl(m_nIP);
+		serv_addr.sin_port = htons(m_nPort);
 
 		if (serv_addr.sin_addr.s_addr == INADDR_NONE) {
 			AfxMessageBox("指定IP不存在");
@@ -171,16 +179,17 @@ public:
 			TRACE("连接失败,%d,%s\r\n", WSAGetLastError(), GetErrInfo(WSAGetLastError()).c_str());
 			return false;
 		}
+		TRACE("InitSocket成功\r\n");
 		return true;
 	}
-	
+
 	int DealCommand() {
 		if (m_sock == -1) return -1;
 		char* buffer = m_buffer.data();
 		static size_t index = 0;
 		while (true) {
 			size_t len = recv(m_sock, buffer + index, BUFFER_SIZE - index, 0);
-			if ( (len<=0) && (index<=0) ) return -1;
+			if (((int)len <= 0) && ((int)index <= 0)) return -1; // len是size_t，recv返回-1时会变成大于0的数，所以要强转为int判断
 			TRACE("index = %d, len=%d\r\n", index, len);
 			index += len;
 			len = index;
@@ -190,21 +199,33 @@ public:
 				TRACE("index = %d, len=%d\r\n", index, len);
 				memmove(buffer, buffer + len, index - len);
 				index -= len;
-				
+
 				return m_packet.sCmd;
 			}
 		}
 		delete[] buffer;
 		return -1;
 	}
-	bool Send(const char* pData, int nSize) {
-		if (m_sock == -1) return false;
-		return send(m_sock, pData, nSize, 0) > 0;
-	}
-	bool Send(CPacket& pack) {
-		TRACE("m_sock = %d\r\n", m_sock);
-		if (m_sock == -1) return false;
-		return send(m_sock, pack.Data(), pack.Size(), 0) > 0;
+
+	bool SendPacket(const CPacket& pack, std::list<CPacket>& lstPacks, bool isAutoClosed=true) {
+		if (m_sock == INVALID_SOCKET && m_hThread==INVALID_HANDLE_VALUE) {
+			//if (InitSocket() == false) return false;
+			m_hThread = (HANDLE)_beginthread(&CClientSocket::threadEntry, 0, this);
+		}
+		m_lock.lock();
+		auto pr = m_mapAck.insert(std::pair<HANDLE, std::list<CPacket>&>(pack.hEvent, lstPacks));
+		m_mapAutoClosed.insert(std::pair<HANDLE, bool>(pack.hEvent, isAutoClosed));
+		m_lstSend.push_back(pack);
+		m_lock.unlock();
+		//WaitForSingleObject(pack.hEvent, INFINITE);
+		auto it = m_mapAck.find(pack.hEvent);
+		if (it != m_mapAck.end()) {
+			m_lock.lock();
+			m_mapAck.erase(it);
+			m_lock.unlock();
+			return true;
+		}
+		return false;
 	}
 	bool GetFilePath(std::string& filePath) { // 获取文件列表
 		if ((m_packet.sCmd >= 2) && (m_packet.sCmd <= 4)) {
@@ -227,7 +248,21 @@ public:
 		closesocket(m_sock);
 		m_sock = INVALID_SOCKET;
 	}
+	void UpdateAddress(int nIp, int nPort) {
+		if ((m_nIP!= nIp) || (m_nPort != nPort)){
+			m_nIP = nIp;
+			m_nPort = nPort;
+		}
+	}
 private:
+	HANDLE m_hThread;
+	std::mutex m_lock;
+	bool m_bAutoClosed;
+	std::list<CPacket> m_lstSend;
+	std::map<HANDLE, std::list<CPacket>&> m_mapAck;
+	std::map<HANDLE, bool> m_mapAutoClosed;
+	int m_nIP;
+	int m_nPort;
 	std::vector<char> m_buffer;
 	SOCKET m_sock;
 	CPacket m_packet;
@@ -235,9 +270,12 @@ private:
 	// 将构造和析构函数设为私有，避免外部控制
 	CClientSocket& operator=(const CClientSocket& ss) {}
 	CClientSocket(const CClientSocket& ss) {
+		m_bAutoClosed = ss.m_bAutoClosed;
 		m_sock = ss.m_sock;
+		m_nIP = ss.m_nIP;
+		m_nPort = ss.m_nPort;
 	}
-	CClientSocket() {
+	CClientSocket() :m_nIP(INADDR_ANY), m_nPort(0), m_sock(INVALID_SOCKET), m_bAutoClosed(true), m_hThread(INVALID_HANDLE_VALUE){
 		if (InitSockEnv() == false) {
 			MessageBox(NULL, _T("无法初始化套接字"), _T("初始化错误！"), MB_OK | MB_ICONERROR); // _T用来保证编码兼容性
 			exit(0);
@@ -247,8 +285,11 @@ private:
 	};
 	~CClientSocket() {
 		closesocket(m_sock);
+		m_sock = INVALID_SOCKET;
 		WSACleanup();
 	};
+	static void threadEntry(void* arg);
+	void threadFunc();
 	bool InitSockEnv() {
 		// 套接字初始化
 		WSADATA data;
@@ -266,6 +307,11 @@ private:
 			mInstance = NULL;
 		}
 	}
+	bool Send(const char* pData, int nSize) {
+		if (m_sock == -1) return false;
+		return send(m_sock, pData, nSize, 0) > 0;
+	}
+	bool Send(const CPacket& pack);
 	static CClientSocket* mInstance;
 	// 私有类，帮助调用析构函数
 	class CHelper {
