@@ -21,6 +21,30 @@ std::string GetErrInfo(int WSAErrCode) {
 	return ret;
 }
 
+bool CClientSocket::SendPacket(const CPacket& pack, std::list<CPacket>& lstPacks, bool isAutoClosed) {
+	if (m_sock == INVALID_SOCKET && m_hThread == INVALID_HANDLE_VALUE) {
+		//if (InitSocket() == false) return false;
+		m_hThread = (HANDLE)_beginthread(&CClientSocket::threadEntry, 0, this);
+		TRACE("start thread\r\n");
+	}
+	m_lock.lock();
+	auto pr = m_mapAck.insert(std::pair<HANDLE, std::list<CPacket>&>(pack.hEvent, lstPacks));
+	m_mapAutoClosed.insert(std::pair<HANDLE, bool>(pack.hEvent, isAutoClosed));
+	m_lstSend.push_back(pack);
+	m_lock.unlock();
+	TRACE(" cmd:%d event: %08X thread_id=%d\r\n", pack.sCmd, pack.hEvent, GetCurrentThreadId());
+	WaitForSingleObject(pack.hEvent, INFINITE);
+	TRACE(" cmd:%d event: %08X thread_id=%d\r\n", pack.sCmd, pack.hEvent, GetCurrentThreadId());
+	auto it = m_mapAck.find(pack.hEvent);
+	if (it != m_mapAck.end()) {
+		m_lock.lock();
+		m_mapAck.erase(it);
+		m_lock.unlock();
+		return true;
+	}
+	return false;
+}
+
 void CClientSocket::threadEntry(void* arg)
 {
 	CClientSocket* thiz = (CClientSocket*)arg;
@@ -40,7 +64,7 @@ void CClientSocket::threadFunc()
 			CPacket& head = m_lstSend.front();
 			m_lock.unlock();
 			if (Send(head) == false) {
-				TRACE("发送失败\r\n");	
+				TRACE("发送失败\r\n");
 				continue;
 			}
 			auto it = m_mapAck.find(head.hEvent);
@@ -48,6 +72,7 @@ void CClientSocket::threadFunc()
 				auto it0 = m_mapAutoClosed.find(head.hEvent);
 				do {
 					int length = recv(m_sock, pBuffer + index, BUFFER_SIZE - index, 0);
+					TRACE("recv length=%d  index=%d\r\n", length, index);
 					if ((length > 0) || (index > 0)) {
 						index += length;
 						size_t size = (size_t)index;
@@ -68,7 +93,13 @@ void CClientSocket::threadFunc()
 						if (length <= 0 && index <= 0) {
 							CloseSocket();
 							SetEvent(head.hEvent); // 等到服务器命令关闭后，再通知事件完成
-							m_mapAutoClosed.erase(it0);
+							if (it0 != m_mapAutoClosed.end()) {
+								m_mapAutoClosed.erase(it0);
+								TRACE("SetEvent sCmd=%d it0->second=%d\r\n", head.sCmd, it0->second);
+							}
+							else {
+								TRACE("异常，没有对应的pair\r\n");
+							}
 							break;
 						}
 					}
@@ -76,12 +107,25 @@ void CClientSocket::threadFunc()
 			}
 			m_lock.lock();
 			m_lstSend.pop_front();
+			m_mapAutoClosed.erase(head.hEvent);
 			m_lock.unlock();
-			if (InitSocket()==false) InitSocket();
+			if (InitSocket() == false) InitSocket();
 		}
 		Sleep(1);
 	}
 	CloseSocket();
+}
+
+void CClientSocket::threadFunc2()
+{
+	MSG msg;
+	while (::GetMessage(&msg, NULL, 0, 0)){
+		TranslateMessage(&msg);
+		DispatchMessage(&msg);
+		if (m_mapFunc.find(msg.message) != m_mapFunc.end()) {
+			(this->*m_mapFunc[msg.message])(msg.message, msg.wParam, msg.lParam);
+		}
+	}
 }
 
 bool CClientSocket::Send(const CPacket& pack)
@@ -91,4 +135,21 @@ bool CClientSocket::Send(const CPacket& pack)
 	std::string strOut;
 	pack.Data(strOut);
 	return send(m_sock, strOut.c_str(), strOut.size(), 0) > 0;
+}
+
+void CClientSocket::SendPack(UINT nMsg, WPARAM wParam, LPARAM lParam)
+{
+	if (InitSocket() == true) {
+		int ret = send(m_sock, (char*)wParam, (int)lParam, 0);
+		if (ret > 0) {
+
+		}
+		else {
+			CloseSocket();
+		}
+	}
+	else {
+
+	}
+	
 }

@@ -59,6 +59,7 @@ int CClientController::SendCommandPacket(int nCmd, bool autoClose, BYTE* pData, 
     pClient->SendPacket(CPacket(nCmd, pData, nLength, hEvent), *plstPacks, autoClose);
     CloseHandle(hEvent); // 回收事件句柄，防止资源耗尽
     if (plstPacks->size() > 0) {
+        TRACE("%s start %lld\r\n", __FUNCTION__, GetTickCount64());
         return plstPacks->front().sCmd;
     }
 	return -1;;
@@ -83,7 +84,7 @@ int CClientController::DownFile(CString strPath)
 			return -1;
 		}
 		m_remoteDlg.BeginWaitCursor();
-		m_statusDlg.SetWindowTextA(_T("命令正在执行"));
+		m_statusDlg.m_info.SetWindowText(_T("命令正在执行"));
 		m_statusDlg.ShowWindow(SW_SHOW);
 		m_statusDlg.CenterWindow(&m_remoteDlg);
 		m_statusDlg.SetActiveWindow();
@@ -94,7 +95,7 @@ int CClientController::DownFile(CString strPath)
 void CClientController::StartWatchScreen()
 {
 	m_isClosed = false;
-    m_watchDlg.SetParent(&m_remoteDlg);
+    //m_watchDlg.SetParent(&m_remoteDlg);
 	m_hThreadWatch = (HANDLE)_beginthread(&CClientController::ThreadWatchScreenEntry, 0, this);
     m_watchDlg.DoModal();
 	m_isClosed = true;

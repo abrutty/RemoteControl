@@ -10,6 +10,8 @@
 #include <mutex>
 
 #define BUFFER_SIZE 4096000
+#define WM_SEND_PACK (WM_USER+1) // 发送包数据
+
 #pragma pack(push)  // 保存当前字节对齐的状态
 #pragma pack(1)	// 强制取消字节对齐，改为连续存放
 class CPacket {
@@ -207,26 +209,7 @@ public:
 		return -1;
 	}
 
-	bool SendPacket(const CPacket& pack, std::list<CPacket>& lstPacks, bool isAutoClosed=true) {
-		if (m_sock == INVALID_SOCKET && m_hThread==INVALID_HANDLE_VALUE) {
-			//if (InitSocket() == false) return false;
-			m_hThread = (HANDLE)_beginthread(&CClientSocket::threadEntry, 0, this);
-		}
-		m_lock.lock();
-		auto pr = m_mapAck.insert(std::pair<HANDLE, std::list<CPacket>&>(pack.hEvent, lstPacks));
-		m_mapAutoClosed.insert(std::pair<HANDLE, bool>(pack.hEvent, isAutoClosed));
-		m_lstSend.push_back(pack);
-		m_lock.unlock();
-		//WaitForSingleObject(pack.hEvent, INFINITE);
-		auto it = m_mapAck.find(pack.hEvent);
-		if (it != m_mapAck.end()) {
-			m_lock.lock();
-			m_mapAck.erase(it);
-			m_lock.unlock();
-			return true;
-		}
-		return false;
-	}
+	bool SendPacket(const CPacket& pack, std::list<CPacket>& lstPacks, bool isAutoClosed = true);
 	bool GetFilePath(std::string& filePath) { // 获取文件列表
 		if ((m_packet.sCmd >= 2) && (m_packet.sCmd <= 4)) {
 			filePath = m_packet.strData;
@@ -255,6 +238,8 @@ public:
 		}
 	}
 private:
+	typedef void(CClientSocket::*MSGFUNC)(UINT nMsg, WPARAM wParam, LPARAM lParam);
+	std::map<UINT, MSGFUNC> m_mapFunc;
 	HANDLE m_hThread;
 	std::mutex m_lock;
 	bool m_bAutoClosed;
@@ -270,10 +255,23 @@ private:
 	// 将构造和析构函数设为私有，避免外部控制
 	CClientSocket& operator=(const CClientSocket& ss) {}
 	CClientSocket(const CClientSocket& ss) {
+		m_hThread = INVALID_HANDLE_VALUE;
 		m_bAutoClosed = ss.m_bAutoClosed;
 		m_sock = ss.m_sock;
 		m_nIP = ss.m_nIP;
 		m_nPort = ss.m_nPort;
+		struct {
+			UINT message;
+			MSGFUNC func;
+		} funcs[] = {
+			{WM_SEND_PACK, &CClientSocket::SendPack},
+			{0,NULL}
+		};
+		for (int i = 0; funcs[i].message != 0; i++) {
+			if (m_mapFunc.insert(std::pair<UINT, MSGFUNC>(funcs[i].message, funcs[i].func)).second == false) {
+				TRACE("插入失败，消息值：%d 函数值：%08X, 序号：%d\r\n", funcs[i].message, funcs[i].func, i);
+			}
+		}
 	}
 	CClientSocket() :m_nIP(INADDR_ANY), m_nPort(0), m_sock(INVALID_SOCKET), m_bAutoClosed(true), m_hThread(INVALID_HANDLE_VALUE){
 		if (InitSockEnv() == false) {
@@ -290,6 +288,7 @@ private:
 	};
 	static void threadEntry(void* arg);
 	void threadFunc();
+	void threadFunc2();
 	bool InitSockEnv() {
 		// 套接字初始化
 		WSADATA data;
@@ -312,6 +311,7 @@ private:
 		return send(m_sock, pData, nSize, 0) > 0;
 	}
 	bool Send(const CPacket& pack);
+	void SendPack(UINT nMsg, WPARAM wParam, LPARAM lParam); // wParam：缓冲区的值   lParam：缓冲区的长度
 	static CClientSocket* mInstance;
 	// 私有类，帮助调用析构函数
 	class CHelper {

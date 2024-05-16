@@ -362,11 +362,11 @@ void CRemoteClientDlg::LoadFileInfo()
 	DeleteTreeChildItem(hTreeSelected);
 	m_List.DeleteAllItems();
 	CString strPath = GetPath(hTreeSelected);
-	TRACE("hTreeSelected %08X\r\n", hTreeSelected);
 	std::list<CPacket> lstPackets;
 	int nCmd = CClientController::getInstance()->SendCommandPacket(2, false, (BYTE*)(LPCTSTR)strPath, strPath.GetLength(), &lstPackets);
 	
 	if (lstPackets.size() > 0) {
+		TRACE("lstPackets size=%d\r\n", lstPackets.size());
 		for (auto it = lstPackets.begin(); it != lstPackets.end(); it++) {
 			PFILEINFO pInfo = (PFILEINFO)(*it).strData.c_str();
 			if(pInfo->hasNext==false) continue;
