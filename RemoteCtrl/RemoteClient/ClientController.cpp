@@ -48,21 +48,10 @@ LRESULT CClientController::SendMessage(MSG msg)
     return info.result;
 }
 
-int CClientController::SendCommandPacket(int nCmd, bool autoClose, BYTE* pData, size_t nLength, std::list<CPacket> *plstPacks)
+bool CClientController::SendCommandPacket(HWND hWnd, int nCmd, bool bAutoClose, BYTE* pData, size_t nLength)
 {
 	CClientSocket* pClient = CClientSocket::getInstance();
-    HANDLE hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    std::list<CPacket> lstPacks; // 应答结果包
-    if (plstPacks == nullptr) {
-        plstPacks = &lstPacks;
-    }
-    pClient->SendPacket(CPacket(nCmd, pData, nLength, hEvent), *plstPacks, autoClose);
-    CloseHandle(hEvent); // 回收事件句柄，防止资源耗尽
-    if (plstPacks->size() > 0) {
-        TRACE("%s start %lld\r\n", __FUNCTION__, GetTickCount64());
-        return plstPacks->front().sCmd;
-    }
-	return -1;;
+    return pClient->SendPacket(hWnd, CPacket(nCmd, pData, nLength), bAutoClose);
 }
 
 int CClientController::DownFile(CString strPath)
@@ -113,7 +102,7 @@ void CClientController::ThreadDownloadFile()
     }
     CClientSocket* pClient = CClientSocket::getInstance();
     do {
-        int ret = SendCommandPacket(4, false, (BYTE*)(LPCTSTR)m_strRemote, m_strRemote.GetLength());
+        int ret = SendCommandPacket(m_remoteDlg, 4, false, (BYTE*)(LPCTSTR)m_strRemote, m_strRemote.GetLength());
 		if (ret < 0) {
 			AfxMessageBox("执行下载命令失败");
 			TRACE("ret=%d\r\n", ret);
@@ -157,7 +146,7 @@ void CClientController::ThreadWatchScreen()
     while (!m_isClosed) {
         if (m_watchDlg.isFull() == false) {
             std::list<CPacket> lstPacks;
-            int ret = SendCommandPacket(6, true, nullptr, 0, &lstPacks);
+            int ret = SendCommandPacket(m_watchDlg.GetSafeHwnd(), 6, true, nullptr, 0);
             if (ret == 6) {
                 if (CTool::Bytes2Image(m_watchDlg.GetImage(), lstPacks.front().strData) == 0) {
                     m_watchDlg.SetImageStatus(true);

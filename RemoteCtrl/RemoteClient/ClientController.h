@@ -43,7 +43,12 @@ public:
 	// 8-->解锁
 	// 9-->删除文件
 	// 1981-->测试连接
-	int SendCommandPacket(int nCmd, bool autoClose = true, BYTE* pData = nullptr, size_t nLength = 0, std::list<CPacket> *plstPacks=nullptr);
+	bool SendCommandPacket(
+		HWND hWnd, // 收到数据包后，需要应答的窗口
+		int nCmd, 
+		bool bAutoClose = true, 
+		BYTE* pData = nullptr, 
+		size_t nLength = 0);
 	int GetImage(CImage& image) {
 		CClientSocket* pClient = CClientSocket::getInstance();
 		return CTool::Bytes2Image(image, pClient->GetPacket().strData);
