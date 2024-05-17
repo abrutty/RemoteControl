@@ -42,6 +42,7 @@ BEGIN_MESSAGE_MAP(CWatchDialog, CDialog)
 	ON_STN_CLICKED(IDC_WATCH, &CWatchDialog::OnStnClickedWatch)
 	ON_BN_CLICKED(IDC_BTN_LOCK, &CWatchDialog::OnBnClickedBtnLock)
 	ON_BN_CLICKED(IDC_BTN_UNLOCK, &CWatchDialog::OnBnClickedBtnUnlock)
+	ON_MESSAGE(WM_SEND_PACK_ACK,&CWatchDialog::OnSendPackAck) // 自定义消息注册
 END_MESSAGE_MAP()
 
 
@@ -69,9 +70,8 @@ BOOL CWatchDialog::OnInitDialog()
 {
 	CDialog::OnInitDialog();
 
-	// TODO:  在此添加额外的初始化
 	m_isFull = false; // 最开始没有缓存数据
-	SetTimer(0, 45, nullptr);
+	//SetTimer(0, 45, nullptr);
 	return TRUE;  // return TRUE unless you set the focus to a control
 	// 异常: OCX 属性页应返回 FALSE
 }
@@ -79,24 +79,62 @@ BOOL CWatchDialog::OnInitDialog()
 
 void CWatchDialog::OnTimer(UINT_PTR nIDEvent)
 {
-	// TODO: 在此添加消息处理程序代码和/或调用默认值
-	if (nIDEvent == 0) {
-		CClientController* pParent = CClientController::getInstance();
-		if (m_isFull == true) {
-			CRect rect;
-			m_picture.GetWindowRect(rect);
-			m_nObjWidth = m_image.GetWidth();
-			m_nObjHeight = m_image.GetHeight();
-			m_image.StretchBlt(
-				m_picture.GetDC()->GetSafeHdc(), 0, 0, rect.Width(), rect.Height(), SRCCOPY);
-			m_picture.InvalidateRect(nullptr);
-			m_image.Destroy();
-			m_isFull = false; // 设为false，线程函数里才能更新
-		}
-	}
+	//if (nIDEvent == 0) {
+	//	CClientController* pParent = CClientController::getInstance();
+	//	if (m_isFull == true) {
+	//		CRect rect;
+	//		m_picture.GetWindowRect(rect);
+	//		m_nObjWidth = m_image.GetWidth();
+	//		m_nObjHeight = m_image.GetHeight();
+	//		m_image.StretchBlt(
+	//			m_picture.GetDC()->GetSafeHdc(), 0, 0, rect.Width(), rect.Height(), SRCCOPY);
+	//		m_picture.InvalidateRect(nullptr);
+	//		m_image.Destroy();
+	//		m_isFull = false; // 设为false，线程函数里才能更新
+	//	}
+	//}
 	CDialog::OnTimer(nIDEvent);
 }
 
+
+LRESULT CWatchDialog::OnSendPackAck(WPARAM wParam, LPARAM lParam)
+{
+	if ((lParam==-1) || (lParam==-2)) { // 错误处理
+
+	}
+	else if (lParam == 1) { // 对方关闭了套接字
+
+	}
+	else {
+		CPacket* pPacket = (CPacket*)wParam;
+		if (pPacket != nullptr) {
+			switch (pPacket->sCmd) {
+			case 6:
+			{
+				if (m_isFull) {
+					CTool::Bytes2Image(m_image, pPacket->strData);
+					CRect rect;
+					m_picture.GetWindowRect(rect);
+					m_nObjWidth = m_image.GetWidth();
+					m_nObjHeight = m_image.GetHeight();
+					m_image.StretchBlt(
+						m_picture.GetDC()->GetSafeHdc(), 0, 0, rect.Width(), rect.Height(), SRCCOPY);
+					m_picture.InvalidateRect(nullptr);
+					m_image.Destroy();
+					m_isFull = false; // 设为false，线程函数里才能更新
+				}
+				break;
+			}
+			case 5:
+			case 7:
+			case 8:
+			default:
+				break;
+			}
+		}
+	}
+	return 0;
+}
 
 void CWatchDialog::OnLButtonDblClk(UINT nFlags, CPoint point) // point 是客户端坐标
 {

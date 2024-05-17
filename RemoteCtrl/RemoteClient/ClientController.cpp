@@ -48,10 +48,11 @@ LRESULT CClientController::SendMessage(MSG msg)
     return info.result;
 }
 
-bool CClientController::SendCommandPacket(HWND hWnd, int nCmd, bool bAutoClose, BYTE* pData, size_t nLength)
+bool CClientController::SendCommandPacket(HWND hWnd, int nCmd, bool bAutoClose, BYTE* pData, size_t nLength, WPARAM wParam)
 {
 	CClientSocket* pClient = CClientSocket::getInstance();
-    return pClient->SendPacket(hWnd, CPacket(nCmd, pData, nLength), bAutoClose);
+    bool ret = pClient->SendPacket(hWnd, CPacket(nCmd, pData, nLength), bAutoClose, wParam);
+    return ret;
 }
 
 int CClientController::DownFile(CString strPath)
@@ -68,10 +69,16 @@ int CClientController::DownFile(CString strPath)
 	if (dlg.DoModal() == IDOK) {
 		m_strRemote = strPath;
 		m_strLocal = dlg.GetPathName();
-		m_hThreadDownload = (HANDLE)_beginthread(&CClientController::ThreadDownloadEntry, 0, this); // 添加线程
-		if (WaitForSingleObject(m_hThreadDownload, 0) != WAIT_TIMEOUT) { // 线程创建失败
-			return -1;
-		}
+        FILE* pFile = fopen(m_strLocal, "wb+");
+        if (pFile == nullptr) {
+            AfxMessageBox(_T("本地没有权限保存文件"));
+            return -1;
+        }
+        SendCommandPacket(m_remoteDlg, 4, false, (BYTE*)(LPCSTR)m_strRemote, m_strRemote.GetLength(), (WPARAM)pFile);
+		//m_hThreadDownload = (HANDLE)_beginthread(&CClientController::ThreadDownloadEntry, 0, this); // 添加线程
+		//if (WaitForSingleObject(m_hThreadDownload, 0) != WAIT_TIMEOUT) { // 线程创建失败
+		//	return -1;
+		//}
 		m_remoteDlg.BeginWaitCursor();
 		m_statusDlg.m_info.SetWindowText(_T("命令正在执行"));
 		m_statusDlg.ShowWindow(SW_SHOW);
@@ -79,6 +86,13 @@ int CClientController::DownFile(CString strPath)
 		m_statusDlg.SetActiveWindow();
 	}
 	return 0;
+}
+
+void CClientController::DownloadEnd()
+{
+    m_statusDlg.ShowWindow(SW_HIDE);
+    m_remoteDlg.EndWaitCursor();
+    m_remoteDlg.MessageBox(_T("下载完成"), _T("完成"));
 }
 
 void CClientController::StartWatchScreen()
@@ -102,7 +116,7 @@ void CClientController::ThreadDownloadFile()
     }
     CClientSocket* pClient = CClientSocket::getInstance();
     do {
-        int ret = SendCommandPacket(m_remoteDlg, 4, false, (BYTE*)(LPCTSTR)m_strRemote, m_strRemote.GetLength());
+        int ret = SendCommandPacket(m_remoteDlg, 4, false, (BYTE*)(LPCSTR)m_strRemote, m_strRemote.GetLength(), (WPARAM)pFile);
 		if (ret < 0) {
 			AfxMessageBox("执行下载命令失败");
 			TRACE("ret=%d\r\n", ret);

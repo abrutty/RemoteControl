@@ -1,10 +1,10 @@
-﻿
-// RemoteClientDlg.h: 头文件
-//
-
-#pragma once
+﻿#pragma once
 #include "ClientSocket.h"
 #include "StatusDlg.h"
+
+#ifndef WM_SEND_PACK_ACK
+#define WM_SEND_PACK_ACK (WM_USER+2) // 发送包数据应答
+#endif // !WM_SEND_PACK_ACK
 
 //#define WM_SEND_PACKET (WM_USER+1) // 自定义发送数据包的消息，为了解决线程校验通不过的问题，因为在子线程去处理下载文件
 // 1.自定义消息--->2.自定义消息响应函数--->3.注册消息--->4.实现消息函数
@@ -64,9 +64,9 @@ public:
 	afx_msg void OnDownloadFile();
 	afx_msg void OnDeleteFile();
 	afx_msg void OnRunFile();
-	//afx_msg LRESULT OnSendPacket(WPARAM wParam, LPARAM lParam); // 自定义消息响应函数
 	afx_msg void OnBnClickedBtnStartWatch();
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 	afx_msg void OnIpnFieldchangedIpaddressServ(NMHDR* pNMHDR, LRESULT* pResult);
 	afx_msg void OnEnChangeEditPort();
+	afx_msg LRESULT OnSendPackAck(WPARAM wParam, LPARAM lParam); // 自定义消息响应函数
 };

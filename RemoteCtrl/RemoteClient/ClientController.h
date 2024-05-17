@@ -48,12 +48,14 @@ public:
 		int nCmd, 
 		bool bAutoClose = true, 
 		BYTE* pData = nullptr, 
-		size_t nLength = 0);
+		size_t nLength = 0,
+		WPARAM wParam = 0);
 	int GetImage(CImage& image) {
 		CClientSocket* pClient = CClientSocket::getInstance();
 		return CTool::Bytes2Image(image, pClient->GetPacket().strData);
 	}
 	int DownFile(CString strPath);
+	void DownloadEnd();
 	void StartWatchScreen();
 protected:
 	void ThreadDownloadFile();
