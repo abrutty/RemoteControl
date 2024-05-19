@@ -42,7 +42,7 @@ BEGIN_MESSAGE_MAP(CWatchDialog, CDialog)
 	ON_STN_CLICKED(IDC_WATCH, &CWatchDialog::OnStnClickedWatch)
 	ON_BN_CLICKED(IDC_BTN_LOCK, &CWatchDialog::OnBnClickedBtnLock)
 	ON_BN_CLICKED(IDC_BTN_UNLOCK, &CWatchDialog::OnBnClickedBtnUnlock)
-	ON_MESSAGE(WM_SEND_PACK_ACK,&CWatchDialog::OnSendPackAck) // 自定义消息注册
+	ON_MESSAGE(WM_SEND_PACK_ACK, &CWatchDialog::OnSendPackAck) // 自定义消息注册
 END_MESSAGE_MAP()
 
 
@@ -99,7 +99,7 @@ void CWatchDialog::OnTimer(UINT_PTR nIDEvent)
 
 LRESULT CWatchDialog::OnSendPackAck(WPARAM wParam, LPARAM lParam)
 {
-	if ((lParam==-1) || (lParam==-2)) { // 错误处理
+	if ((lParam == -1) || (lParam == -2)) { // 错误处理
 
 	}
 	else if (lParam == 1) { // 对方关闭了套接字
@@ -108,24 +108,25 @@ LRESULT CWatchDialog::OnSendPackAck(WPARAM wParam, LPARAM lParam)
 	else {
 		CPacket* pPacket = (CPacket*)wParam;
 		if (pPacket != nullptr) {
-			switch (pPacket->sCmd) {
+			CPacket head = *(CPacket*)wParam;
+			delete (CPacket*)wParam;
+			switch (head.sCmd) {
 			case 6:
 			{
-				if (m_isFull) {
-					CTool::Bytes2Image(m_image, pPacket->strData);
-					CRect rect;
-					m_picture.GetWindowRect(rect);
-					m_nObjWidth = m_image.GetWidth();
-					m_nObjHeight = m_image.GetHeight();
-					m_image.StretchBlt(
-						m_picture.GetDC()->GetSafeHdc(), 0, 0, rect.Width(), rect.Height(), SRCCOPY);
-					m_picture.InvalidateRect(nullptr);
-					m_image.Destroy();
-					m_isFull = false; // 设为false，线程函数里才能更新
-				}
+				CTool::Bytes2Image(m_image, head.strData);
+				CRect rect;
+				m_picture.GetWindowRect(rect);
+				m_nObjWidth = m_image.GetWidth();
+				m_nObjHeight = m_image.GetHeight();
+				m_image.StretchBlt(
+					m_picture.GetDC()->GetSafeHdc(), 0, 0, rect.Width(), rect.Height(), SRCCOPY);
+				m_picture.InvalidateRect(nullptr);
+				m_image.Destroy();
 				break;
 			}
 			case 5:
+				TRACE("远程应答了鼠标操作\r\n");
+				break;
 			case 7:
 			case 8:
 			default:
@@ -146,7 +147,7 @@ void CWatchDialog::OnLButtonDblClk(UINT nFlags, CPoint point) // point 是客户
 		event.ptXY = remote;
 		event.nButton = 0; // 左键
 		event.nAction = 2; // 双击
-		CClientController::getInstance()->SendCommandPacket(GetSafeHwnd(), 5, true, (BYTE*)&event,sizeof(event));
+		CClientController::getInstance()->SendCommandPacket(GetSafeHwnd(), 5, true, (BYTE*)&event, sizeof(event));
 	}
 
 	CDialog::OnLButtonDblClk(nFlags, point);
@@ -216,7 +217,7 @@ void CWatchDialog::OnRButtonDown(UINT nFlags, CPoint point)
 		event.nAction = 2; // 按下
 		CClientController::getInstance()->SendCommandPacket(GetSafeHwnd(), 5, true, (BYTE*)&event, sizeof(event));
 	}
-	
+
 	CDialog::OnRButtonDown(nFlags, point);
 }
 
@@ -250,7 +251,7 @@ void CWatchDialog::OnMouseMove(UINT nFlags, CPoint point)
 		event.nAction = 0; // 移动
 		CClientController::getInstance()->SendCommandPacket(GetSafeHwnd(), 5, true, (BYTE*)&event, sizeof(event));
 	}
-	
+
 	CDialog::OnMouseMove(nFlags, point);
 }
 
@@ -269,7 +270,7 @@ void CWatchDialog::OnStnClickedWatch()
 		event.nAction = 0; // 单击
 		CClientController::getInstance()->SendCommandPacket(GetSafeHwnd(), 5, true, (BYTE*)&event, sizeof(event));
 	}
-	
+
 }
 
 
