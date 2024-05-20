@@ -37,17 +37,6 @@ int CClientController::Invoke(CWnd*& pMainWnd)
     return m_remoteDlg.DoModal();
 }
 
-LRESULT CClientController::SendMessage(MSG msg)
-{
-    HANDLE hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (hEvent == NULL) return -2;
-    MSGINFO info(msg);
-    PostThreadMessage(m_hThreadID, WM_SEND_MESSAGE, (WPARAM)&info, (LPARAM)&hEvent);
-    WaitForSingleObject(hEvent, INFINITE); // INFINITE 表示等待无限时间
-    CloseHandle(hEvent);
-    return info.result;
-}
-
 bool CClientController::SendCommandPacket(HWND hWnd, int nCmd, bool bAutoClose, BYTE* pData, size_t nLength, WPARAM wParam)
 {
 	CClientSocket* pClient = CClientSocket::getInstance();
@@ -65,7 +54,6 @@ int CClientController::DownFile(CString strPath)
             nullptr,
             & m_remoteDlg
             );
-
             if (dlg.DoModal() == IDOK) {
                 m_strRemote = strPath;
                 m_strLocal = dlg.GetPathName();
@@ -75,10 +63,6 @@ int CClientController::DownFile(CString strPath)
                     return -1;
                 }
                 SendCommandPacket(m_remoteDlg, 4, false, (BYTE*)(LPCSTR)m_strRemote, m_strRemote.GetLength(), (WPARAM)pFile);
-                //m_hThreadDownload = (HANDLE)_beginthread(&CClientController::ThreadDownloadEntry, 0, this); // 添加线程
-                //if (WaitForSingleObject(m_hThreadDownload, 0) != WAIT_TIMEOUT) { // 线程创建失败
-                //	return -1;
-                //}
                 m_remoteDlg.BeginWaitCursor();
                 m_statusDlg.m_info.SetWindowText(_T("命令正在执行"));
                 m_statusDlg.ShowWindow(SW_SHOW);
@@ -98,60 +82,10 @@ void CClientController::DownloadEnd()
 void CClientController::StartWatchScreen()
 {
     m_isClosed = false;
-    //m_watchDlg.SetParent(&m_remoteDlg);
     m_hThreadWatch = (HANDLE)_beginthread(&CClientController::ThreadWatchScreenEntry, 0, this);
     m_watchDlg.DoModal();
     m_isClosed = true;
     WaitForSingleObject(m_hThreadWatch, 500);
-}
-
-void CClientController::ThreadDownloadFile()
-{
-    FILE* pFile = fopen(m_strLocal, "wb+");
-    if (pFile == nullptr) {
-        AfxMessageBox(_T("没有权限保存该文件或文件无法创建"));
-        m_statusDlg.ShowWindow(SW_HIDE);
-        m_remoteDlg.EndWaitCursor();
-        return;
-    }
-    CClientSocket* pClient = CClientSocket::getInstance();
-    do {
-        int ret = SendCommandPacket(m_remoteDlg, 4, false, (BYTE*)(LPCSTR)m_strRemote, m_strRemote.GetLength(), (WPARAM)pFile);
-        if (ret < 0) {
-            AfxMessageBox("执行下载命令失败");
-            TRACE("ret=%d\r\n", ret);
-            break;
-        }
-
-        long long nLength = *(long long*)pClient->GetPacket().strData.c_str();
-        if (nLength == 0) {
-            AfxMessageBox("文件为空或无法下载文件");
-            break;
-        }
-        long long nCount = 0;
-        while (nCount < nLength) {
-            ret = pClient->DealCommand();
-            if (ret < 0) {
-                AfxMessageBox("传输失败");
-                TRACE("传输失败，ret=%d\r\n", ret);
-                break;
-            }
-            fwrite(pClient->GetPacket().strData.c_str(), 1, pClient->GetPacket().strData.size(), pFile);
-            nCount += pClient->GetPacket().strData.size();
-        }
-    } while (false);
-    fclose(pFile);
-    pClient->CloseSocket();
-    m_statusDlg.ShowWindow(SW_HIDE);
-    m_remoteDlg.EndWaitCursor();
-    m_remoteDlg.MessageBox(_T("下载完成"), _T("完成"));
-}
-
-void CClientController::ThreadDownloadEntry(void* arg)
-{
-    CClientController* thiz = (CClientController*)arg;
-    thiz->ThreadDownloadFile();
-    _endthread();
 }
 
 void CClientController::ThreadWatchScreen()
@@ -166,7 +100,7 @@ void CClientController::ThreadWatchScreen()
             nTick = GetTickCount64();
             int ret = SendCommandPacket(m_watchDlg.GetSafeHwnd(), 6, true, nullptr, 0);
             if (ret == 1) {
-               
+                TRACE("成功发送图片\r\n");
             }
             else {
                 TRACE("获取图片失败\r\n");
@@ -201,7 +135,12 @@ void CClientController::threadFunc()
             }
             SetEvent(hEvent);
         }
-        
+        else {
+            auto it = m_mapFunc.find(msg.message);
+            if (it != m_mapFunc.end()) {
+                (this->*it->second)(msg.message, msg.wParam, msg.lParam);
+            }
+        }
     }
 }
 
@@ -212,20 +151,6 @@ unsigned __stdcall CClientController::threadEntry(void* arg)
     _endthreadex(0);
     return 0;
 }
-
-//LRESULT CClientController::OnSendPack(UINT nMsg, WPARAM wParam, LPARAM lParam)
-//{
-//    CClientSocket* pClient = CClientSocket::getInstance();
-//    CPacket* pPacket = (CPacket*)wParam;
-//    return pClient->Send(*pPacket);
-//}
-
-//LRESULT CClientController::OnSendData(UINT nMsg, WPARAM wParam, LPARAM lParam)
-//{
-//	CClientSocket* pClient = CClientSocket::getInstance();
-//	char* pBuffer = (char*)wParam;
-//	return pClient->Send(pBuffer, (int)lParam);
-//}
 
 LRESULT CClientController::OnShowStatus(UINT nMsg, WPARAM wParam, LPARAM lParam)
 {

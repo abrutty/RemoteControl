@@ -24,18 +24,19 @@ public:
 protected:
 	virtual void DoDataExchange(CDataExchange* pDX);	// DDX/DDV 支持
 public:
-	
+	void LoadFileInfo();
 private:
 	bool m_isClosed; // 监视是否关闭远程控制对话框   第一次点开始监控按钮，然后关闭监控对话框，第二次点监控按钮就会出问题
 	//因为点一次按钮就开一次线程，点两次就开了两个线程，两个线程都将屏幕存到同一个image
 private:
-	//static void ThreadEntryForWatchData(void* arg); 
-	//void ThreadWatchData();	
-	//static void ThreadEntryForDownFile(void *arg); // 下载大文件的线程入口函数
-	//void ThreadDownFile();
+	
 	CString GetPath(HTREEITEM hTree);
+	void InitUIData();
+	void DealCommand(WORD nCmd, const std::string& strData, LPARAM lParam);
 	void DeleteTreeChildItem(HTREEITEM hTree);
-	void LoadFileInfo();
+	void Str2Tree(const std::string& drivers, CTreeCtrl& tree);
+	void UpdateFileInfo(const FILEINFO& finfo, HTREEITEM hParent);
+	void UpdateDownloadFile(const std::string& strData, FILE* pFile);
 	void LoadFileCurrent(); // 删除文件后刷新显示
 	
 // 实现

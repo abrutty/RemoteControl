@@ -8,7 +8,6 @@
 #include "Tool.h"
 
 
-//#define WM_SEND_DATA (WM_USER+2) // 只发送数据
 #define WM_SHOW_STATUS (WM_USER+3) // 展示状态
 #define WM_SHOW_WATCH (WM_USER+4) // 远程监控
 #define WM_SEND_MESSAGE (WM_USER+0x1000) // 自定义消息处理
@@ -18,7 +17,6 @@ public:
 	static CClientController* getInstance(); // 获取全局唯一对象
 	int InitController(); // 初始化操作
 	int Invoke(CWnd*& pMainWnd); // 启动
-	LRESULT SendMessage(MSG msg); // 发送消息
 	void UpdateAddress(int nIp, int nPort) {  // 更新网络服务器地址
 		CClientSocket::getInstance()->UpdateAddress(nIp, nPort);
 	}
@@ -28,11 +26,6 @@ public:
 	void CloseSocket() {
 		CClientSocket::getInstance()->CloseSocket();
 	}
-	/*bool SendPacket(const CPacket& pack) {
-		CClientSocket* pClient = CClientSocket::getInstance();
-		if (pClient->InitSocket() == false) return false;
-		pClient->Send(pack);
-	}*/
 	// 1-->查看磁盘分区
 	// 2-->查看指定目录下的文件
 	// 3-->打开文件
@@ -58,13 +51,10 @@ public:
 	void DownloadEnd();
 	void StartWatchScreen();
 protected:
-	void ThreadDownloadFile();
-	static void ThreadDownloadEntry(void* arg); // 静态函数不能使用this指针，此函数可以专注于线程框架
 	void ThreadWatchScreen(); // 可以使用this指针，专注于处理逻辑
 	static void ThreadWatchScreenEntry(void* arg);
 	CClientController():m_statusDlg(&m_remoteDlg), m_watchDlg(&m_remoteDlg) {
 		m_hThread = INVALID_HANDLE_VALUE;
-		m_hThreadDownload = INVALID_HANDLE_VALUE;
 		m_hThreadWatch = INVALID_HANDLE_VALUE;
 		m_hThreadID = -1;
 		m_isClosed = true;
@@ -80,8 +70,6 @@ protected:
 			m_instance = nullptr;
 		}
 	}
-	//LRESULT OnSendPack(UINT nMsg, WPARAM wParam, LPARAM lParam);
-	//LRESULT OnSendData(UINT nMsg, WPARAM wParam, LPARAM lParam);
 	LRESULT OnShowStatus(UINT nMsg, WPARAM wParam, LPARAM lParam);
 	LRESULT OnShowWatcher(UINT nMsg, WPARAM wParam, LPARAM lParam);
 private:
@@ -110,7 +98,6 @@ private:
 	CRemoteClientDlg m_remoteDlg;
 	CStatusDlg m_statusDlg;
 	HANDLE m_hThread;
-	HANDLE m_hThreadDownload; // 控制下载文件的线程
 	unsigned m_hThreadID;
 	HANDLE m_hThreadWatch;
 	bool m_isClosed; // 监视是否关闭远程控制对话框   第一次点开始监控按钮，然后关闭监控对话框，第二次点监控按钮就会出问题
