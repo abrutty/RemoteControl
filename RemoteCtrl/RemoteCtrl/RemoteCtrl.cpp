@@ -11,6 +11,7 @@
 #define new DEBUG_NEW
 #endif
 
+#define INVOKE_PATH _T("C:\\Users\\zyx\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\RemeteCtrl.exe")
 // 唯一的应用程序对象
 
 CWinApp theApp;
@@ -49,20 +50,10 @@ void WriteRegisterTable(const CString& strPath) {
 	RegCloseKey(hKey);
 }
 
-// 通过写入startup文件夹的方式实现开机自启动
-void WriteStartupDir(const CString& strPath) {
-    CString strCmd = GetCommandLine();
-    strCmd.Replace(_T("\""), _T(""));
-    BOOL ret = CopyFile(strCmd, strPath, FALSE);
-    if (ret == FALSE) {
-        MessageBox(NULL, _T("复制文件失败"), _T("错误"), MB_ICONERROR | MB_TOPMOST);
-        exit(0);
-    }
-}
-void ChooseAutoInvoke() {
+
+bool ChooseAutoInvoke(const CString& strPath) {
     //CString strPath = CString(_T("C:\\Windows\\SysWOW64\\RemoteCtrl.exe")); // 此处的SysWOW64目录要注意，可能是system32目录
-    CString strPath = CString(_T("C:\\Users\\zyx\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\RemeteCtrl.exe")); 
-    if (PathFileExists(strPath)) return;
+    if (PathFileExists(strPath)) return true;
     
     CString strInfo = _T("该程序用于合法途径\n");
     strInfo += _T("继续运行该程序，将处于被监控状态\n");
@@ -72,54 +63,48 @@ void ChooseAutoInvoke() {
     int ret = MessageBox(NULL, strInfo, _T("警告"), MB_YESNOCANCEL | MB_ICONWARNING | MB_TOPMOST);
     if (ret == IDYES) {
         //WriteRegisterTable(strPath); 
-        WriteStartupDir(strPath);
+        
+		if (CTool::WriteStartupDir(strPath) == false) {
+			MessageBox(NULL, _T("复制文件失败"), _T("错误"), MB_ICONERROR | MB_TOPMOST);
+            return false;
+		}
     }
     else {
         if (ret == IDCANCEL) {
-            exit(0);
+            return false;
         }
     }
-    return;
+    return true;
 }
+
+
+
 int main()
 {
-    int nRetCode = 0;
-
-    HMODULE hModule = ::GetModuleHandle(nullptr);
-
-    if (hModule != nullptr)
-    {
-        // 初始化 MFC 并在失败时显示错误
-        if (!AfxWinInit(hModule, nullptr, ::GetCommandLine(), 0))
-        {
-            // TODO: 在此处为应用程序的行为编写代码。
-            wprintf(L"错误: MFC 初始化失败\n");
-            nRetCode = 1;
-        }
-        else
-        {
-            // TODO: 在此处为应用程序的行为编写代码。
-            CCommand cmd;
-            ChooseAutoInvoke();
-            int ret = CServerSocket::getInstance()->Run(&CCommand::RunCommand, &cmd);
-            switch (ret) {
-            case -1:
+    if (CTool::IsAdmin()) {
+        if (!CTool::Init()) return 1;
+        OutputDebugString("administrator\r\n");
+        MessageBox(NULL, _T("管理员"), _T("用户状态"), 0);
+        if (ChooseAutoInvoke(INVOKE_PATH) == true) {
+			CCommand cmd;
+			int ret = CServerSocket::getInstance()->Run(&CCommand::RunCommand, &cmd);
+			switch (ret) {
+			case -1:
 				MessageBox(nullptr, _T("网络初始化异常"), _T("网络初始化失败"), MB_OK | MB_ICONERROR);
-				exit(0);
-                break;
-            case -2:
+				break;
+			case -2:
 				MessageBox(nullptr, _T("多次无法接入用户"), _T("接入用户失败"), MB_OK | MB_ICONERROR);
-				exit(0);
-                break;
-            }
-        }
+				break;
+			}
+        }    
     }
-    else
-    {
-        // TODO: 更改错误代码以符合需要
-        wprintf(L"错误: GetModuleHandle 失败\n");
-        nRetCode = 1;
+    else {
+        OutputDebugString("normal user\r\n");
+        MessageBox(NULL, _T("普通用户"), _T("用户状态"), 0);
+        /*if (CTool::RunAsAdmin() == false) {
+            CTool::ShowError();
+        }*/
+        return 0;
     }
-
-    return nRetCode;
+    return 0;
 }
