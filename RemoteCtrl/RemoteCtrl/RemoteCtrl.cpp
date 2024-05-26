@@ -6,6 +6,7 @@
 #include "RemoteCtrl.h"
 #include "ServerSocket.h"
 #include "Command.h"
+#include "CQueue.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -148,32 +149,26 @@ int main()
 {
 	if (!CTool::Init()) return 1;
 	printf("press any key to exit\r\n");
-	HANDLE hIOCP = INVALID_HANDLE_VALUE;
-	hIOCP = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, NULL, 1);
-	if (hIOCP == nullptr || hIOCP == INVALID_HANDLE_VALUE) {
-		printf("create hIOCP failed, %d\r\n", GetLastError());
-		return 1;
-	}
-	HANDLE hThread = (HANDLE)_beginthread(threadQueueEntry, 0, hIOCP);
+	CQueue<std::string> lstStrings;
 	ULONGLONG tick = GetTickCount64();
 	ULONGLONG tick0 = GetTickCount64();
 	while (_kbhit() == 0) { // 请求和实现分离
-		if (GetTickCount64() - tick0 > 130) {
-			PostQueuedCompletionStatus(hIOCP, sizeof(IOCP_PARAM), (ULONG_PTR)new IOCP_PARAM(IocpListPop, "hello world", func), NULL);
+		if (GetTickCount64() - tick0 > 1300) {
+			lstStrings.PushBack("hello world");
 			tick0 = GetTickCount64();
 		}
-		if (GetTickCount64() - tick > 200) {
-			PostQueuedCompletionStatus(hIOCP, sizeof(IOCP_PARAM), (ULONG_PTR)new IOCP_PARAM(IocpListPush, "hello world"), NULL);
+		if (GetTickCount64() - tick > 2000) {
+			std::string str;
+			lstStrings.PopFront(str);
 			tick = GetTickCount64();
+			printf("pop from queue:%s\r\n", str.c_str());
 		}
 		Sleep(1);
 	}
-	if (hIOCP != NULL) {
-		PostQueuedCompletionStatus(hIOCP, 0, NULL, NULL);
-		WaitForSingleObject(hThread, INFINITE);
-	}
-	CloseHandle(hIOCP);
-	printf("exit done\r\n");
+	
+	printf("exit done, size=%d\r\n", lstStrings.Size());
+	lstStrings.Clear();
+	printf("exit done, size=%d\r\n", lstStrings.Size());
 	exit(0);
    // if (CTool::IsAdmin()) {
    //     if (!CTool::Init()) return 1;
