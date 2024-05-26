@@ -77,34 +77,128 @@ bool ChooseAutoInvoke(const CString& strPath) {
     return true;
 }
 
+#include <conio.h>
+enum {
+	IocpListEmpty,
+	IocpListPush,
+	IocpListPop
+};
+typedef struct IocpParam
+{
+	int nOperator; // 操作
+	std::string strData; // 数据
+	_beginthread_proc_type cbFunc; // 回调
+	IocpParam(int op, const char* sData, _beginthread_proc_type cb=nullptr) {
+		nOperator = op;
+		strData = sData;
+		cbFunc = cb;
+	}
+	IocpParam() {
+		nOperator = -1;
+	}
+}IOCP_PARAM;
 
+void threadMain(HANDLE hIOCP) {
+	std::list<std::string> lstString;
+	DWORD dwTransferred = 0;
+	ULONG_PTR CompletionKey = 0;
+	OVERLAPPED* pOverlapped = NULL;
 
+	while (GetQueuedCompletionStatus(hIOCP, &dwTransferred, &CompletionKey, &pOverlapped, INFINITE)) {
+		if (dwTransferred == 0 || CompletionKey == NULL) {
+			printf("thread is prepared to exit\r\n");
+			break;
+		}
+		IOCP_PARAM* pParam = (IOCP_PARAM*)CompletionKey;
+		if (pParam->nOperator == IocpListPush) {
+			lstString.push_back(pParam->strData);
+		}
+		else if (pParam->nOperator == IocpListPop) {
+			std::string str;
+			if (lstString.size() > 0) {
+				str = lstString.front();
+				lstString.pop_front();
+			}
+			if (pParam->cbFunc) {
+				pParam->cbFunc(&str);
+			}
+		}
+		else if (pParam->nOperator == IocpListEmpty) {
+			lstString.clear();
+		}
+		delete pParam;
+	}
+}
+void threadQueueEntry(HANDLE hIOCP) {
+	threadMain(hIOCP);
+	_endthread(); // 代码到此为止，会导致本地对象无法调用析构，从而导致内存泄漏
+	//因为一些析构指令在_endthread后执行，所以要使用线程入口函数和线程功能函数区分开，保证能够析构
+}
+void func(void* arg) {
+	std::string* pstr = (std::string*)arg;
+	if (pstr != nullptr) {
+		printf("pop from list: %s\r\n", pstr->c_str());
+		//delete pstr;
+	}
+	else {
+		printf("list is empty\r\n");
+	}
+}
 int main()
 {
-    if (CTool::IsAdmin()) {
-        if (!CTool::Init()) return 1;
-        OutputDebugString("administrator\r\n");
-        MessageBox(NULL, _T("管理员"), _T("用户状态"), 0);
-        if (ChooseAutoInvoke(INVOKE_PATH) == true) {
-			CCommand cmd;
-			int ret = CServerSocket::getInstance()->Run(&CCommand::RunCommand, &cmd);
-			switch (ret) {
-			case -1:
-				MessageBox(nullptr, _T("网络初始化异常"), _T("网络初始化失败"), MB_OK | MB_ICONERROR);
-				break;
-			case -2:
-				MessageBox(nullptr, _T("多次无法接入用户"), _T("接入用户失败"), MB_OK | MB_ICONERROR);
-				break;
-			}
-        }    
-    }
-    else {
-        OutputDebugString("normal user\r\n");
-        MessageBox(NULL, _T("普通用户"), _T("用户状态"), 0);
-        /*if (CTool::RunAsAdmin() == false) {
-            CTool::ShowError();
-        }*/
-        return 0;
-    }
-    return 0;
+	if (!CTool::Init()) return 1;
+	printf("press any key to exit\r\n");
+	HANDLE hIOCP = INVALID_HANDLE_VALUE;
+	hIOCP = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, NULL, 1);
+	if (hIOCP == nullptr || hIOCP == INVALID_HANDLE_VALUE) {
+		printf("create hIOCP failed, %d\r\n", GetLastError());
+		return 1;
+	}
+	HANDLE hThread = (HANDLE)_beginthread(threadQueueEntry, 0, hIOCP);
+	ULONGLONG tick = GetTickCount64();
+	ULONGLONG tick0 = GetTickCount64();
+	while (_kbhit() == 0) { // 请求和实现分离
+		if (GetTickCount64() - tick0 > 130) {
+			PostQueuedCompletionStatus(hIOCP, sizeof(IOCP_PARAM), (ULONG_PTR)new IOCP_PARAM(IocpListPop, "hello world", func), NULL);
+			tick0 = GetTickCount64();
+		}
+		if (GetTickCount64() - tick > 200) {
+			PostQueuedCompletionStatus(hIOCP, sizeof(IOCP_PARAM), (ULONG_PTR)new IOCP_PARAM(IocpListPush, "hello world"), NULL);
+			tick = GetTickCount64();
+		}
+		Sleep(1);
+	}
+	if (hIOCP != NULL) {
+		PostQueuedCompletionStatus(hIOCP, 0, NULL, NULL);
+		WaitForSingleObject(hThread, INFINITE);
+	}
+	CloseHandle(hIOCP);
+	printf("exit done\r\n");
+	exit(0);
+   // if (CTool::IsAdmin()) {
+   //     if (!CTool::Init()) return 1;
+   //     OutputDebugString("administrator\r\n");
+   //     MessageBox(NULL, _T("管理员"), _T("用户状态"), 0);
+   //     if (ChooseAutoInvoke(INVOKE_PATH) == true) {
+			//CCommand cmd;
+			//int ret = CServerSocket::getInstance()->Run(&CCommand::RunCommand, &cmd);
+			//switch (ret) {
+			//case -1:
+			//	MessageBox(nullptr, _T("网络初始化异常"), _T("网络初始化失败"), MB_OK | MB_ICONERROR);
+			//	break;
+			//case -2:
+			//	MessageBox(nullptr, _T("多次无法接入用户"), _T("接入用户失败"), MB_OK | MB_ICONERROR);
+			//	break;
+			//}
+   //     }    
+   // }
+   // else {
+   //     OutputDebugString("normal user\r\n");
+   //     MessageBox(NULL, _T("普通用户"), _T("用户状态"), 0);
+   //     /*if (CTool::RunAsAdmin() == false) {
+   //         CTool::ShowError();
+   //     }*/
+   //     return 0;
+   // }
+   // return 0;
 }
