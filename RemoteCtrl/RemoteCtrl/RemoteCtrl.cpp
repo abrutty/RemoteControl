@@ -145,19 +145,17 @@ void func(void* arg) {
 		printf("list is empty\r\n");
 	}
 }
-int main()
-{
-	if (!CTool::Init()) return 1;
+void test() {
 	printf("press any key to exit\r\n");
 	CQueue<std::string> lstStrings;
 	ULONGLONG tick = GetTickCount64();
-	ULONGLONG tick0 = GetTickCount64();
-	while (_kbhit() == 0) { // 请求和实现分离
-		if (GetTickCount64() - tick0 > 1300) {
+	ULONGLONG tick0 = GetTickCount64(), total=GetTickCount64();
+	while (GetTickCount64()-total<=1000) { // 请求和实现分离
+		if (GetTickCount64() - tick0 > 13) {
 			lstStrings.PushBack("hello world");
 			tick0 = GetTickCount64();
 		}
-		if (GetTickCount64() - tick > 2000) {
+		if (GetTickCount64() - tick > 20) {
 			std::string str;
 			lstStrings.PopFront(str);
 			tick = GetTickCount64();
@@ -165,11 +163,17 @@ int main()
 		}
 		Sleep(1);
 	}
-	
+
 	printf("exit done, size=%d\r\n", lstStrings.Size());
 	lstStrings.Clear();
 	printf("exit done, size=%d\r\n", lstStrings.Size());
-	exit(0);
+}
+int main()
+{
+	if (!CTool::Init()) return 1;
+	for (int i = 0; i < 100; i++) test();
+	//exit(0);  exit(0)类似于_endthread，直接终止了，不会触发析构，导致内存泄漏
+	
    // if (CTool::IsAdmin()) {
    //     if (!CTool::Init()) return 1;
    //     OutputDebugString("administrator\r\n");

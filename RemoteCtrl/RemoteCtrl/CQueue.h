@@ -36,17 +36,19 @@ public:
 		m_hCompeletionPort = CreateIoCompletionPort(INVALID_HANDLE_VALUE, NULL, NULL, 1);
 		m_hThread = INVALID_HANDLE_VALUE;
 		if (m_hCompeletionPort != NULL) {
-			m_hThread = (HANDLE)_beginthread(&CQueue<T>::threadEntry, 0, m_hCompeletionPort);
+			m_hThread = (HANDLE)_beginthread(&CQueue<T>::threadEntry, 0, this);
 		}
 	}
 	~CQueue() {
 		if (m_lock == true) return;
 		m_lock = true;
-		HANDLE hTemp = m_hCompeletionPort;
 		PostQueuedCompletionStatus(m_hCompeletionPort, 0, NULL, NULL);
 		WaitForSingleObject(m_hThread, INFINITE);
-		m_hCompeletionPort = NULL;
-		CloseHandle(hTemp);
+		if (m_hCompeletionPort != NULL) {
+			HANDLE hTemp = m_hCompeletionPort;
+			m_hCompeletionPort = NULL;
+			CloseHandle(hTemp);
+		}
 	}
 	bool PushBack(const T& data) {
 		IocpParam* pParam = new IocpParam(EQPush, data);
@@ -159,7 +161,9 @@ private:
 			pParam = (PPARAM*)CompletionKey;
 			DealParam(pParam);
 		}
-		CloseHandle(m_hCompeletionPort);
+		HANDLE hTemp = m_hCompeletionPort;
+		m_hCompeletionPort = NULL;
+		CloseHandle(hTemp);
 	}
 	
 private:
@@ -169,3 +173,4 @@ private:
 	std::atomic<bool> m_lock; // 队列正在析构
 };
 
+// windows 里可以访问的内存地址，一般都会占多位，相当于是高地址
