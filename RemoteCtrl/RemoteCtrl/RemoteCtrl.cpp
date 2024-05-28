@@ -7,6 +7,8 @@
 #include "ServerSocket.h"
 #include "Command.h"
 #include "CQueue.h"
+#include <MSWSock.h>
+#include "MyServer.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -78,100 +80,15 @@ bool ChooseAutoInvoke(const CString& strPath) {
     return true;
 }
 
-#include <conio.h>
-enum {
-	IocpListEmpty,
-	IocpListPush,
-	IocpListPop
-};
-typedef struct IocpParam
-{
-	int nOperator; // 操作
-	std::string strData; // 数据
-	_beginthread_proc_type cbFunc; // 回调
-	IocpParam(int op, const char* sData, _beginthread_proc_type cb=nullptr) {
-		nOperator = op;
-		strData = sData;
-		cbFunc = cb;
-	}
-	IocpParam() {
-		nOperator = -1;
-	}
-}IOCP_PARAM;
-
-void threadMain(HANDLE hIOCP) {
-	std::list<std::string> lstString;
-	DWORD dwTransferred = 0;
-	ULONG_PTR CompletionKey = 0;
-	OVERLAPPED* pOverlapped = NULL;
-
-	while (GetQueuedCompletionStatus(hIOCP, &dwTransferred, &CompletionKey, &pOverlapped, INFINITE)) {
-		if (dwTransferred == 0 || CompletionKey == NULL) {
-			printf("thread is prepared to exit\r\n");
-			break;
-		}
-		IOCP_PARAM* pParam = (IOCP_PARAM*)CompletionKey;
-		if (pParam->nOperator == IocpListPush) {
-			lstString.push_back(pParam->strData);
-		}
-		else if (pParam->nOperator == IocpListPop) {
-			std::string str;
-			if (lstString.size() > 0) {
-				str = lstString.front();
-				lstString.pop_front();
-			}
-			if (pParam->cbFunc) {
-				pParam->cbFunc(&str);
-			}
-		}
-		else if (pParam->nOperator == IocpListEmpty) {
-			lstString.clear();
-		}
-		delete pParam;
-	}
-}
-void threadQueueEntry(HANDLE hIOCP) {
-	threadMain(hIOCP);
-	_endthread(); // 代码到此为止，会导致本地对象无法调用析构，从而导致内存泄漏
-	//因为一些析构指令在_endthread后执行，所以要使用线程入口函数和线程功能函数区分开，保证能够析构
-}
-void func(void* arg) {
-	std::string* pstr = (std::string*)arg;
-	if (pstr != nullptr) {
-		printf("pop from list: %s\r\n", pstr->c_str());
-		//delete pstr;
-	}
-	else {
-		printf("list is empty\r\n");
-	}
-}
-void test() {
-	printf("press any key to exit\r\n");
-	CQueue<std::string> lstStrings;
-	ULONGLONG tick = GetTickCount64();
-	ULONGLONG tick0 = GetTickCount64(), total=GetTickCount64();
-	while (GetTickCount64()-total<=1000) { // 请求和实现分离
-		if (GetTickCount64() - tick0 > 13) {
-			lstStrings.PushBack("hello world");
-			tick0 = GetTickCount64();
-		}
-		if (GetTickCount64() - tick > 20) {
-			std::string str;
-			lstStrings.PopFront(str);
-			tick = GetTickCount64();
-			printf("pop from queue:%s\r\n", str.c_str());
-		}
-		Sleep(1);
-	}
-
-	printf("exit done, size=%d\r\n", lstStrings.Size());
-	lstStrings.Clear();
-	printf("exit done, size=%d\r\n", lstStrings.Size());
+void iocp() {
+	MyServer server;
+	server.StartService();
+	getchar();
 }
 int main()
 {
 	if (!CTool::Init()) return 1;
-	for (int i = 0; i < 100; i++) test();
+	
 	//exit(0);  exit(0)类似于_endthread，直接终止了，不会触发析构，导致内存泄漏
 	
    // if (CTool::IsAdmin()) {
