@@ -54,6 +54,18 @@
     <ClInclude Include="MyServer.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="CEdoyunQueue.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="EdoyunThread.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="EdoyunServer.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="EdoyunTool.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="RemoteCtrl.cpp">
@@ -75,6 +87,12 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="MyServer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="EdoyunServer.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="EdoyunTool.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

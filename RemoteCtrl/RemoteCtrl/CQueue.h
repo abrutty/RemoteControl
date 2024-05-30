@@ -2,11 +2,11 @@
 #include "pch.h"
 #include <list>
 #include <atomic>
-
+#include "MyThread.h"
 
 // 使用模板类最好不用cpp文件，都写在头文件里
 template<class T>
-class CQueue
+class CQueue // 线程安全队列，用IOCP实现
 {
 public:
 	enum {
@@ -39,7 +39,7 @@ public:
 			m_hThread = (HANDLE)_beginthread(&CQueue<T>::threadEntry, 0, this);
 		}
 	}
-	~CQueue() {
+	virtual ~CQueue() {
 		if (m_lock == true) return;
 		m_lock = true;
 		PostQueuedCompletionStatus(m_hCompeletionPort, 0, NULL, NULL);
@@ -61,7 +61,7 @@ public:
 		if (ret == false) delete pParam;
 		return ret;
 	}
-	bool PopFront(T& data) {
+	virtual bool PopFront(T& data) {
 		HANDLE hEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
 		IocpParam Param(EQPop, data, hEvent);
 		if (m_lock == true) {
@@ -100,20 +100,20 @@ public:
 		if (ret == false) delete pParam;
 		return ret;
 	}
-private:
+
+protected:
 	static void threadEntry(void* arg) {
 		CQueue<T>* thiz = (CQueue<T>*)arg;
 		thiz->threadMain();
 		_endthread();
 	}
-	void DealParam(PPARAM* pParam) {
+	virtual void DealParam(PPARAM* pParam) {
 		switch (pParam->nOperator) {
-		case EQPush: {
+		case EQPush: 
 			m_lstData.push_back(pParam->Data);
 			delete pParam;
-		}
 			break;
-		case EQPop: {
+		case EQPop:
 			if (m_lstData.size() > 0) {
 				pParam->Data = m_lstData.front();
 				m_lstData.pop_front();
@@ -121,19 +121,16 @@ private:
 			if (pParam->hEvent != NULL) {
 				SetEvent(pParam->hEvent);
 			}
-		}
 			break;
-		case EQSize: {
+		case EQSize: 
 			pParam->nOperator = m_lstData.size();
 			if (pParam->hEvent != NULL) {
 				SetEvent(pParam->hEvent);
 			}
-		}
 			break;
-		case EQClear: {
+		case EQClear:
 			m_lstData.clear();
 			delete pParam;
-		}
 			break;
 		default:
 			OutputDebugStringA("unknown operator\r\n");
@@ -166,7 +163,7 @@ private:
 		CloseHandle(hTemp);
 	}
 	
-private:
+protected:
 	std::list<T> m_lstData;
 	HANDLE m_hCompeletionPort;
 	HANDLE m_hThread;
@@ -174,3 +171,82 @@ private:
 };
 
 // windows 里可以访问的内存地址，一般都会占多位，相当于是高地址
+
+
+template <class T>
+class SendQueue :public CQueue<T>, public ThreadFuncBase
+{
+public:
+	typedef int (ThreadFuncBase::* MYCALLBACK)(T& data);
+	SendQueue(ThreadFuncBase* obj, MYCALLBACK callback)
+		:CQueue<T>(), m_base(obj), m_callback(callback)
+	{
+		m_thread.Start();
+		m_thread.UpdateWorker(::ThreadWorker(this, (FUNCTYPE)&SendQueue<T>::threadTick));
+	}
+	virtual ~SendQueue() {
+		//m_thread.Stop();
+		m_base = NULL;
+		m_callback = NULL;
+	}
+protected:
+	virtual bool PopFront(T& data) { return false; };
+	bool PopFront()
+	{
+		typename CQueue<T>::IocpParam* Param = new typename CQueue<T>::IocpParam(CQueue<T>::EQPop, T());
+		if (CQueue<T>::m_lock == true) {
+			delete Param;
+			return false;
+		}
+		bool ret = PostQueuedCompletionStatus(CQueue<T>::m_hCompeletionPort, sizeof(typename CQueue<T>::PPARAM), (ULONG_PTR)&Param, NULL);
+		if (ret == false) {
+			delete Param;
+			return false;
+		}
+		return ret;
+	}
+	int threadTick() {
+		if (CQueue<T>::m_lstData.size() > 0) {
+			PopFront();
+		}
+		Sleep(1);
+		return 0;
+	}
+	virtual void DealParam(typename CQueue<T>::PPARAM* pParam) {
+		switch (pParam->nOperator)
+		{
+		case CQueue<T>::EQPush:
+			CQueue<T>::m_lstData.push_back(pParam->Data);
+			delete pParam;
+			break;
+		case CQueue<T>::EQPop:
+			if (CQueue<T>::m_lstData.size() > 0) {
+				pParam->Data = CQueue<T>::m_lstData.front();
+				if ((m_base->*m_callback)(pParam->Data) == 0)
+					CQueue<T>::m_lstData.pop_front();
+			}
+			delete pParam;
+			break;
+		case CQueue<T>::EQSize:
+			pParam->nOperator = CQueue<T>::m_lstData.size();
+			if (pParam->hEvent != NULL) {
+				SetEvent(pParam->hEvent);
+			}
+			break;
+		case CQueue<T>::EQClear:
+			CQueue<T>::m_lstData.clear();
+			delete pParam;
+			break;
+		default:
+			OutputDebugStringA("unknown operator\r\n");
+			break;
+		}
+	}
+private:
+	ThreadFuncBase* m_base;
+	MYCALLBACK m_callback;
+	MyThread m_thread;
+};
+
+typedef SendQueue<std::vector<char>>::MYCALLBACK SENDCALLBACK;
+

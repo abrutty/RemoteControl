@@ -10,7 +10,7 @@ typedef int (ThreadFuncBase::* FUNCTYPE)();
 class ThreadWorker {
 public:
 	ThreadWorker():thiz(NULL),func(NULL){}
-	ThreadWorker(ThreadFuncBase* obj, FUNCTYPE f):thiz(obj), func(f){}
+	ThreadWorker(void* obj, FUNCTYPE f):thiz((ThreadFuncBase*)obj), func(f){}
 	ThreadWorker(const ThreadWorker& worker) {
 		thiz = worker.thiz;
 		func = worker.func;
@@ -42,6 +42,7 @@ class MyThread
 public:
 	MyThread() {
 		m_hThread = NULL;
+		m_bStatus = false;
 	}
 	~MyThread() {
 		Stop();
@@ -58,34 +59,43 @@ public:
 	// 返回true 表示有效，返回false 表示线程异常或已终止
 	bool IsValid() {
 		if (m_hThread == NULL || (m_hThread == INVALID_HANDLE_VALUE)) return false;
-		return WaitForSingleObject(m_hThread, 0) == WAIT_OBJECT_0;
+		return WaitForSingleObject(m_hThread, 0) == WAIT_TIMEOUT;
 	}
 	bool Stop() {
 		if (m_bStatus == false) return true;
 		m_bStatus = false;
 		bool ret = WaitForSingleObject(m_hThread, INFINITE) == WAIT_OBJECT_0;
+		/*if (ret == WAIT_TIMEOUT) {
+			TerminateThread(m_hThread, -1);
+		}*/
 		UpdateWorker();
 		return ret;
 	}
 	void UpdateWorker(const ::ThreadWorker& worker = ::ThreadWorker()) {
-		if (!worker.IsValid()) {
-			m_worker.store(NULL);
-			return;
-		}
-		if (m_worker.load() != NULL) {
+		if ((m_worker.load()) != NULL && (m_worker.load()!=&worker)) {
 			::ThreadWorker* pWorker = m_worker.load();
 			m_worker.store(NULL);
 			delete pWorker;
+		}
+		if (m_worker.load() == &worker) return;
+		if (!worker.IsValid()) {
+			m_worker.store(NULL);
+			return;
 		}
 		m_worker.store(new ::ThreadWorker(worker));
 	}
 	// true 表示空闲， false 表示已经分配了工作
 	bool IsIdle() {
+		if (m_worker.load() == NULL) return true;
 		return !m_worker.load()->IsValid();
 	}
 private:
 	void ThreadWorker() {
 		while (m_bStatus) {
+			if (m_worker == NULL) {
+				Sleep(1);
+				continue;
+			}
 			::ThreadWorker worker = *m_worker.load();
 			if (worker.IsValid()) {
 				int ret = worker();
@@ -95,7 +105,9 @@ private:
 					OutputDebugString(str);
 				}
 				if (ret < 0) {
+					::ThreadWorker* pWorker = m_worker.load();
 					m_worker.store(NULL);
+					delete pWorker;
 				}
 			}
 			else {
@@ -128,6 +140,12 @@ public:
 	MyThreadPool(){}
 	~MyThreadPool() {
 		Stop();
+		for (size_t i = 0; i < m_threads.size(); i++)
+		{
+			MyThread* pThread = m_threads[i];
+			m_threads[i] = NULL;
+			delete pThread;
+		}
 		m_threads.clear();
 	}
 	bool Invoke() {
@@ -155,7 +173,7 @@ public:
 		int index = -1;
 		m_lock.lock();
 		for (int i = 0; i < m_threads.size(); i++) {
-			if (m_threads[i]->IsIdle()) {
+			if (m_threads[i] != NULL && m_threads[i]->IsIdle()) {
 				m_threads[i]->UpdateWorker(worker);
 				index = i;
 				break;

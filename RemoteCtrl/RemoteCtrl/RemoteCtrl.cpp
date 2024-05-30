@@ -1,5 +1,4 @@
 ﻿// RemoteCtrl.cpp : 此文件包含 "main" 函数。程序执行将在此处开始并结束。
-//
 
 #include "pch.h"
 #include "framework.h"
@@ -10,6 +9,7 @@
 #include <MSWSock.h>
 #include "MyServer.h"
 
+//#include "EdoyunServer.h"
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -88,7 +88,7 @@ void iocp() {
 int main()
 {
 	if (!CTool::Init()) return 1;
-	
+	iocp();
 	//exit(0);  exit(0)类似于_endthread，直接终止了，不会触发析构，导致内存泄漏
 	
    // if (CTool::IsAdmin()) {
