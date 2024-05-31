@@ -85,10 +85,57 @@ void iocp() {
 	server.StartService();
 	getchar();
 }
-int main()
+
+void udp_server() {
+	printf("%s(%d):%s\r\n", __FILE__, __LINE__, __FUNCTION__);
+	getchar();
+}
+void udp_client(bool ishost = true) {
+	if (ishost) {
+		printf("%s(%d):%s\r\n", __FILE__, __LINE__, __FUNCTION__);
+	}
+	else {
+		printf("%s(%d):%s\r\n", __FILE__, __LINE__, __FUNCTION__);
+	}
+}
+int main(int argc, char* argv[])
 {
 	if (!CTool::Init()) return 1;
-	iocp();
+	if (argc == 1) {
+		char wstrDir[MAX_PATH];
+		GetCurrentDirectoryA(MAX_PATH, wstrDir);
+		STARTUPINFOA si;
+		PROCESS_INFORMATION pi;
+		memset(&si, 0, sizeof(si));
+		memset(&pi, 0, sizeof(pi));
+		std::string strCmd = argv[0];
+		strCmd += " 1";
+		BOOL bRet = CreateProcessA(NULL, (LPSTR)strCmd.c_str(), NULL, NULL, FALSE, 0, NULL, wstrDir, &si, &pi);
+		DWORD err = GetLastError();
+		if (bRet) {
+			CloseHandle(pi.hThread);
+			CloseHandle(pi.hProcess);
+			TRACE("进程ID=%d\r\n", pi.dwProcessId);
+			TRACE("线程ID=%d\r\n", pi.dwThreadId);
+			strCmd += " 2";
+			bRet = CreateProcessA(NULL, (LPSTR)strCmd.c_str(), NULL, NULL, FALSE, 0, NULL, wstrDir, &si, &pi);
+			if (bRet) {
+				CloseHandle(pi.hThread);
+				CloseHandle(pi.hProcess);
+				TRACE("进程ID=%d\r\n", pi.dwProcessId);
+				TRACE("线程ID=%d\r\n", pi.dwThreadId);
+				udp_server();
+			}	
+		}
+	}
+	else if (argc == 2) {
+		udp_client();
+	}
+	else {
+		udp_client(false);
+	}
+	return 0;
+	//iocp();
 	//exit(0);  exit(0)类似于_endthread，直接终止了，不会触发析构，导致内存泄漏
 	
    // if (CTool::IsAdmin()) {
