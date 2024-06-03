@@ -9,7 +9,9 @@
 #include <MSWSock.h>
 #include "MyServer.h"
 #include <conio.h>
-//#include "EdoyunServer.h"
+#include "MySocket.h"
+#include "MyNetWork.h"
+
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
@@ -95,51 +97,26 @@ void initsock()
 void clearsock() {
 	WSACleanup();
 }
+int RecvFromCB(void* arg, const MyBuffer& buffer, MySockAddrIn& addr) {
+	ESever* server = (ESever*)arg;
+	return server->Sendto(addr, buffer);
+}
+int SendToCB(void* arg,const MySockAddrIn& addr, int ret) {
+	ESever* server = (ESever*)arg;
+	printf("sendto done\r\n");
+	return 0;
+}
 void udp_server() {
+	std::list<MySockAddrIn> lstclients;
 	printf("%s(%d):%s\r\n", __FILE__, __LINE__, __FUNCTION__);
-	SOCKET sock = socket(PF_INET, SOCK_DGRAM, 0);
-	if (sock == INVALID_SOCKET) {
-		printf("%s(%d):%s error\r\n", __FILE__, __LINE__, __FUNCTION__);
-		return;
-	}
-	std::list<sockaddr_in> lstclients;
-	sockaddr_in server, client;
-	memset(&server, 0, sizeof(server));
-	memset(&client, 0, sizeof(client));
-	server.sin_family = AF_INET;
-	server.sin_port = htons(20000);
-	server.sin_addr.s_addr = inet_addr("127.0.0.1");
-	if (bind(sock, (sockaddr*)&server, sizeof(server)) == -1) {
-		printf("%s(%d):%s bind error\r\n", __FILE__, __LINE__, __FUNCTION__);
-		closesocket(sock);
-		return;
-	}
-	char buf[4096] = "";
-	int len = sizeof(client), ret = 0;
-	while (!_kbhit()) {
-		ret = recvfrom(sock, buf, sizeof(buf), 0, (sockaddr*)&client, &len);
-		printf("%s(%d):%s 服务端收到 %d\r\n", __FILE__, __LINE__, __FUNCTION__, ret);
-		if (ret > 0) {
-			if (lstclients.size() <= 0) {
-				lstclients.push_back(client);
-				printf("%s(%d):%s ip=%08X port=%d\r\n", __FILE__, __LINE__, __FUNCTION__, client.sin_addr.s_addr, ntohs(client.sin_port));
-				ret = sendto(sock, buf, ret, 0, (sockaddr*)&client, len);
-				printf("%s(%d):%s\r\n", __FILE__, __LINE__, __FUNCTION__);
-			}
-			else {
-				memcpy((void*)buf, &lstclients.front(), sizeof(lstclients.front()));
-				ret = sendto(sock, buf, sizeof(lstclients.front()), 0, (sockaddr*)&client, len);
-				printf("%s(%d):%s\r\n", __FILE__, __LINE__, __FUNCTION__);
-			}
-			//CTool::Dump((BYTE*)buf, ret);	
-		}
-		else {
-			printf("%s(%d):%s error\r\n", __FILE__, __LINE__, __FUNCTION__);
-		}
-		Sleep(1);
-	}
-	closesocket(sock);
+	EServerParameter param("127.0.0.1", 20000, MYTYPE::MyTypeUDP, NULL, NULL, NULL, RecvFromCB, SendToCB);
+	ESever server(param);
+	server.Invoke(&server);
 	printf("%s(%d):%s\r\n", __FILE__, __LINE__, __FUNCTION__);
+	getchar();
+	return;
+	//SOCKET sock = socket(PF_INET, SOCK_DGRAM, 0);
+	
 }
 void udp_client(bool ishost = true) {
 	Sleep(2000);
@@ -155,18 +132,18 @@ void udp_client(bool ishost = true) {
 	}
 	if (ishost) { // 主客户端
 		printf("%s(%d):%s\r\n", __FILE__, __LINE__, __FUNCTION__);
-		std::string msg = "hello world\n";
-		int ret = sendto(sock, msg.c_str(), msg.size(), 0, (sockaddr*)&server, sizeof(server));
+		MyBuffer msg = "hello world\n";
+		int ret = sendto(sock, msg.c_str(), (int)msg.size(), 0, (sockaddr*)&server, sizeof(server));
 		if (ret > 0) {
 			msg.resize(1024);
 			memset((char*)msg.c_str(), 0, msg.size());
-			ret = recvfrom(sock, (char*)msg.c_str(), msg.size(), 0, (sockaddr*)&client, &len);
+			ret = recvfrom(sock, (char*)msg.c_str(), (int)msg.size(), 0, (sockaddr*)&client, &len);
 			printf("%s(%d):%s 主客户端收到 %d\r\n", __FILE__, __LINE__, __FUNCTION__, ret);
 			if (ret > 0) {
 				printf("%s(%d):%s 主客户端 ip=%08X port=%d\r\n", __FILE__, __LINE__, __FUNCTION__, client.sin_addr.s_addr, ntohs(client.sin_port));
 				printf("%s(%d):%s msg=%s\r\n", __FILE__, __LINE__, __FUNCTION__, msg.c_str());
 			}
-			ret = recvfrom(sock, (char*)msg.c_str(), msg.size(), 0, (sockaddr*)&client, &len);
+			ret = recvfrom(sock, (char*)msg.c_str(), (int)msg.size(), 0, (sockaddr*)&client, &len);
 			printf("%s(%d):%s 主客户端第二次收到 %d， %s\r\n", __FILE__, __LINE__, __FUNCTION__, ret, msg.c_str());
 			if (ret > 0) {
 				//printf("%s(%d):%s 主客户端 ip=%08X port=%d\r\n", __FILE__, __LINE__, __FUNCTION__, client.sin_addr.s_addr, ntohs(client.sin_port));
@@ -177,11 +154,11 @@ void udp_client(bool ishost = true) {
 	else { // 从客户端
 		printf("%s(%d):%s\r\n", __FILE__, __LINE__, __FUNCTION__);
 		std::string msg = "hello world\n";
-		int ret = sendto(sock, msg.c_str(), msg.size(), 0, (sockaddr*)&server, sizeof(server));
+		int ret = sendto(sock, msg.c_str(), (int)msg.size(), 0, (sockaddr*)&server, sizeof(server));
 		if (ret > 0) {
 			msg.resize(1024);
 			memset((char*)msg.c_str(), 0, msg.size());
-			ret = recvfrom(sock, (char*)msg.c_str(), msg.size(), 0, (sockaddr*)&client, &len);
+			ret = recvfrom(sock, (char*)msg.c_str(), (int)msg.size(), 0, (sockaddr*)&client, &len);
 			printf("%s(%d):%s 从客户端收到 %d\r\n", __FILE__, __LINE__, __FUNCTION__, ret);
 			if (ret > 0) {
 				sockaddr_in addr;
@@ -199,8 +176,8 @@ void udp_client(bool ishost = true) {
 }
 int main(int argc, char* argv[])
 {
-	if (!CTool::Init()) return 1;
-	initsock();
+	//if (!CTool::Init()) return 1;
+	/*initsock();
 	if (argc == 1) {
 		char wstrDir[MAX_PATH];
 		GetCurrentDirectoryA(MAX_PATH, wstrDir);
@@ -235,34 +212,34 @@ int main(int argc, char* argv[])
 		udp_client(false);
 	}
 	clearsock();
-	return 0;
+	return 0;*/
 	//iocp();
 	//exit(0);  exit(0)类似于_endthread，直接终止了，不会触发析构，导致内存泄漏
 	
-   // if (CTool::IsAdmin()) {
-   //     if (!CTool::Init()) return 1;
-   //     OutputDebugString("administrator\r\n");
-   //     MessageBox(NULL, _T("管理员"), _T("用户状态"), 0);
-   //     if (ChooseAutoInvoke(INVOKE_PATH) == true) {
-			//CCommand cmd;
-			//int ret = CServerSocket::getInstance()->Run(&CCommand::RunCommand, &cmd);
-			//switch (ret) {
-			//case -1:
-			//	MessageBox(nullptr, _T("网络初始化异常"), _T("网络初始化失败"), MB_OK | MB_ICONERROR);
-			//	break;
-			//case -2:
-			//	MessageBox(nullptr, _T("多次无法接入用户"), _T("接入用户失败"), MB_OK | MB_ICONERROR);
-			//	break;
-			//}
-   //     }    
-   // }
-   // else {
-   //     OutputDebugString("normal user\r\n");
-   //     MessageBox(NULL, _T("普通用户"), _T("用户状态"), 0);
-   //     /*if (CTool::RunAsAdmin() == false) {
-   //         CTool::ShowError();
-   //     }*/
-   //     return 0;
-   // }
-   // return 0;
+  /*  if (CTool::IsAdmin()) {
+        if (!CTool::Init()) return 1;
+        OutputDebugString("administrator\r\n");
+        MessageBox(NULL, _T("管理员"), _T("用户状态"), 0);*/
+       // if (ChooseAutoInvoke(INVOKE_PATH) == true) {
+			CCommand cmd;
+			int ret = CServerSocket::getInstance()->Run(&CCommand::RunCommand, &cmd);
+			switch (ret) {
+			case -1:
+				MessageBox(nullptr, _T("网络初始化异常"), _T("网络初始化失败"), MB_OK | MB_ICONERROR);
+				break;
+			case -2:
+				MessageBox(nullptr, _T("多次无法接入用户"), _T("接入用户失败"), MB_OK | MB_ICONERROR);
+				break;
+			}
+        //}    
+    //}
+    //else {
+    //    OutputDebugString("normal user\r\n");
+    //    MessageBox(NULL, _T("普通用户"), _T("用户状态"), 0);
+    //    /*if (CTool::RunAsAdmin() == false) {
+    //        CTool::ShowError();
+    //    }*/
+    //    return 0;
+    //}
+    return 0;
 }

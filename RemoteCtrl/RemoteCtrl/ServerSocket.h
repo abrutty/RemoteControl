@@ -75,7 +75,7 @@ protected:
 		memset(buffer, 0, BUFFER_SIZE);
 		size_t index = 0;
 		while (true) {
-			size_t len = recv(m_client, buffer+index, BUFFER_SIZE -index, 0);
+			size_t len = recv(m_client, buffer+index, (int)BUFFER_SIZE -index, 0);
 			if (len <= 0) {
 				delete[] buffer;
 				return -1;

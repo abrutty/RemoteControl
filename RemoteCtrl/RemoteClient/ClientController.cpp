@@ -34,7 +34,7 @@ int CClientController::InitController()
 int CClientController::Invoke(CWnd*& pMainWnd)
 {
     pMainWnd = &m_remoteDlg;
-    return m_remoteDlg.DoModal();
+    return (int)m_remoteDlg.DoModal();
 }
 
 bool CClientController::SendCommandPacket(HWND hWnd, int nCmd, bool bAutoClose, BYTE* pData, size_t nLength, WPARAM wParam)

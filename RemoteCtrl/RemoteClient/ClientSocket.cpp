@@ -21,6 +21,89 @@ std::string GetErrInfo(int WSAErrCode) {
 	return ret;
 }
 
+// 打包构造函数
+CPacket::CPacket(WORD sCmd, const BYTE* pData, size_t nSize)
+{
+	{
+		this->sHead = 0xFEFF;
+		this->nLength = nSize + 4;	// 数据长度+sCmd长度(2)+sSum长度(2)
+		this->sCmd = sCmd;
+		if (nSize > 0) {
+			this->strData.resize(nSize);
+			memcpy((void*)strData.c_str(), pData, nSize);
+		}
+		else {
+			this->strData.clear();
+		}
+
+		this->sSUm = 0;
+		for (size_t j = 0; j < strData.size(); j++) { // 进行和校验
+			this->sSUm += BYTE(strData[j]) & 0xFF;
+		}
+	}
+}
+
+// 解包构造函数
+CPacket::CPacket(const BYTE* pData, size_t& nSize)
+{
+	size_t i = 0;	// i 始终指向已读到数据最新的位置
+	for (; i < nSize; i++) {
+		if (*(WORD*)(pData + i) == 0xFEFF) {
+			sHead = *(WORD*)(pData + i); // 找到包头
+			i += 2;	// 防止只有包头FEFF，占两个字节，但没有数据
+			break;
+		}
+	}
+	if (i + 4 + 2 + 2 > nSize) {// 包数据可能不全，或包头未全部接收到，解析失败  +nLength +sCmd +sSum
+		nSize = 0;
+		return;
+	}
+
+	nLength = *(DWORD*)(pData + i);
+	i += 4;
+	if (nLength + i > nSize) { // 包没有完全接收到，比如只收到一半，解析失败
+		nSize = 0;
+		return;
+	}
+
+	sCmd = *(WORD*)(pData + i);
+	i += 2;
+	if (nLength > 4) {
+		strData.resize(nLength - 2 - 2); // 减去sCmd和sSum的长度
+		memcpy((void*)strData.c_str(), pData + i, nLength - 4); //c_str()把string 对象转换成c中的字符串样式
+		i += nLength - 4;
+	}
+
+	sSUm = *(WORD*)(pData + i);
+	i += 2;
+	WORD sum = 0;
+	for (size_t j = 0; j < strData.size(); j++) { // 进行和校验
+		sum += BYTE(strData[j]) & 0xFF;
+	}
+	if (sum == sSUm) {
+		nSize = i; //  head(2字节）nLength(4字节)data...
+		return;
+	}
+	nSize = 0;
+}
+
+const char* CPacket::Data(std::string& strOut) const
+{
+	strOut.resize(nLength + 6);
+	BYTE* pData = (BYTE*)strOut.c_str();
+	*(WORD*)pData = sHead;
+	pData += 2;
+	*(DWORD*)pData = nLength;
+	pData += 4;
+	*(WORD*)pData = sCmd;
+	pData += 2;
+	memcpy(pData, strData.c_str(), strData.size());
+	pData += strData.size();
+	*(WORD*)pData = sSUm;
+	return strOut.c_str();
+}
+
+
 bool CClientSocket::SendPacket(HWND hWnd, const CPacket& pack, bool isAutoClosed, WPARAM wParam)
 {
 	UINT nMode = isAutoClosed ? CSM_AUTOCLOSE : 0;
@@ -73,15 +156,66 @@ CClientSocket::CClientSocket()
 		}
 	}
 }
+
+bool CClientSocket::InitSocket() 
+{
+	if (m_sock != INVALID_SOCKET) CloseSocket();
+	m_sock = socket(PF_INET, SOCK_STREAM, 0);
+	if (m_sock == -1) return false;
+	sockaddr_in serv_addr;
+	memset(&serv_addr, 0, sizeof(serv_addr));
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_addr.s_addr = htonl(m_nIP);
+	serv_addr.sin_port = htons(m_nPort);
+
+	if (serv_addr.sin_addr.s_addr == INADDR_NONE) {
+		AfxMessageBox("指定IP不存在");
+		return false;
+	}
+	int ret = connect(m_sock, (sockaddr*)&serv_addr, sizeof(serv_addr));
+	if (ret == -1) {
+		AfxMessageBox("连接失败");
+		TRACE("连接失败,%d,%s\r\n", WSAGetLastError(), GetErrInfo(WSAGetLastError()).c_str());
+		return false;
+	}
+	TRACE("InitSocket成功\r\n");
+	return true;
+}
+
+int CClientSocket::DealCommand() 
+{
+	if (m_sock == -1) return -1;
+	char* buffer = m_buffer.data();
+	static size_t index = 0;
+	while (true) {
+		size_t len = recv(m_sock, buffer + index, BUFFER_SIZE - index, 0);
+		if (((int)len <= 0) && ((int)index <= 0)) return -1; // len是size_t，recv返回-1时会变成大于0的数，所以要强转为int判断
+		TRACE("index = %d, len=%d\r\n", index, len);
+		index += len;
+		len = index;
+		m_packet = CPacket((BYTE*)buffer, len);
+		TRACE("command = %d\r\n", m_packet.sCmd);
+		if (len > 0) {
+			TRACE("index = %d, len=%d\r\n", index, len);
+			memmove(buffer, buffer + len, index - len);
+			index -= len;
+
+			return m_packet.sCmd;
+		}
+	}
+	delete[] buffer;
+	return -1;
+}
+
 unsigned CClientSocket::threadEntry(void* arg)
 {
 	CClientSocket* thiz = (CClientSocket*)arg;
-	thiz->threadFunc2();
+	thiz->threadFunc();
 	_endthreadex(0);
 	return 0;
 }
 
-void CClientSocket::threadFunc2()
+void CClientSocket::threadFunc()
 {
 	SetEvent(m_eventInvoke);
 	MSG msg;

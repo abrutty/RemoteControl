@@ -29,7 +29,7 @@ public:
 		HRESULT hRet = CreateStreamOnHGlobal(hMem, true, &pStream);
 		if (hRet == S_OK) {
 			ULONG length = 0;
-			pStream->Write(pData, strBuffer.size(), &length);
+			pStream->Write(pData, (ULONG)strBuffer.size(), &length);
 			LARGE_INTEGER bg = { 0 };
 			pStream->Seek(bg, STREAM_SEEK_SET, nullptr);
 			if ((HBITMAP)image != nullptr) image.Destroy();

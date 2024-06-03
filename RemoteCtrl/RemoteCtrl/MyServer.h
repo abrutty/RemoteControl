@@ -111,7 +111,6 @@ public:
 		int ret = m_client->Recv();
 		return ret;
 	}
-	//PCLIENT m_client;
 };
 
 
@@ -175,6 +174,5 @@ private:
 	SOCKET m_sock;
 	sockaddr_in m_addr;
 	std::map<SOCKET, MyClient*> m_client;
-	//CQueue<MyClient> m_lstClient;
 };
 

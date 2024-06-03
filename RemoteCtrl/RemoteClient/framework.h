@@ -10,7 +10,7 @@
 
 // 关闭 MFC 的一些常见且经常可放心忽略的隐藏警告消息
 #define _AFX_ALL_WARNINGS
-
+#include <vld.h>
 #include <afxwin.h>         // MFC 核心组件和标准组件
 #include <afxext.h>         // MFC 扩展
 

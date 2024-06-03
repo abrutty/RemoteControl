@@ -22,7 +22,7 @@ public:
 		}
 		return *this;
 	}
-	//ThreadWorker& operator=(ThreadWorker&& worker) = delete;
+
 	int operator()() {
 		if (IsValid()) {
 			return (thiz->*func)();

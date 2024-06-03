@@ -116,7 +116,7 @@
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
     </ClCompile>
     <Link>
-      <SubSystem>Console</SubSystem>
+      <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>DebugFull</GenerateDebugInformation>
       <EntryPointSymbol>mainCRTStartup</EntryPointSymbol>
       <UACExecutionLevel>AsInvoker</UACExecutionLevel>
@@ -141,15 +141,13 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClInclude Include="CEdoyunQueue.h" />
     <ClInclude Include="Command.h" />
     <ClInclude Include="CQueue.h" />
-    <ClInclude Include="EdoyunServer.h" />
-    <ClInclude Include="EdoyunThread.h" />
-    <ClInclude Include="EdoyunTool.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="LockDialog.h" />
+    <ClInclude Include="MyNetWork.h" />
     <ClInclude Include="MyServer.h" />
+    <ClInclude Include="MySocket.h" />
     <ClInclude Include="MyThread.h" />
     <ClInclude Include="Packet.h" />
     <ClInclude Include="pch.h" />
@@ -161,9 +159,8 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Command.cpp" />
-    <ClCompile Include="EdoyunServer.cpp" />
-    <ClCompile Include="EdoyunTool.cpp" />
     <ClCompile Include="LockDialog.cpp" />
+    <ClCompile Include="MyNetWork.cpp" />
     <ClCompile Include="MyServer.cpp" />
     <ClCompile Include="pch.cpp">
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>

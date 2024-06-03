@@ -10,7 +10,7 @@ public:
 	// 打包构造
 	CPacket(WORD sCmd, const BYTE* pData, size_t nSize) {
 		this->sHead = 0xFEFF;
-		this->nLength = nSize + 4;	// 数据长度+sCmd长度(2)+sSum长度(2)
+		this->nLength = (DWORD)(nSize + 4);	// 数据长度+sCmd长度(2)+sSum长度(2)
 		this->sCmd = sCmd;
 		if (nSize > 0) {
 			this->strData.resize(nSize);
