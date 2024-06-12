@@ -7,7 +7,6 @@
 #include <vector>
 #include <list>
 #include <map>
-#include <mutex>
 
 #define BUFFER_SIZE 4096000
 #define WM_SEND_PACK (WM_USER+1) // 发送包数据
@@ -18,25 +17,9 @@
 class CPacket {
 public:
 	CPacket() :sHead(0), nLength(0), sCmd(0), sSUm(0) {}
-	// 打包构造
-	CPacket(WORD sCmd, const BYTE* pData, size_t nSize) ;
-	CPacket(const CPacket& pack) {
-		sHead = pack.sHead;
-		nLength = pack.nLength;
-		sCmd = pack.sCmd;
-		strData = pack.strData;
-		sSUm = pack.sSUm;
-	}
-	CPacket& operator=(const CPacket& pack) {
-		if (this != &pack) {
-			sHead = pack.sHead;
-			nLength = pack.nLength;
-			sCmd = pack.sCmd;
-			strData = pack.strData;
-			sSUm = pack.sSUm;
-		}
-		return *this;
-	}
+	CPacket(WORD sCmd, const BYTE* pData, size_t nSize); // 打包构造
+	CPacket(const CPacket& pack); // 复制构造
+	CPacket& operator=(const CPacket& pack);
 	// 解包构造函数
 	CPacket(const BYTE* pData, size_t& nSize);
 	~CPacket() {}
@@ -121,6 +104,7 @@ public:
 	}
 	bool InitSocket();
 	int DealCommand();
+	// 只是把数据包放到消息队列中，并没有真正发送
 	bool SendPacket(HWND hWnd, const CPacket& pack, bool isAutoClosed = true, WPARAM wParam=0);
 	bool GetFilePath(std::string& filePath) { // 获取文件列表
 		if ((m_packet.sCmd >= 2) && (m_packet.sCmd <= 4)) {
@@ -153,13 +137,9 @@ private:
 	HANDLE m_eventInvoke; // 启动事件
 	UINT m_nThreadID;
 	typedef void(CClientSocket::*MSGFUNC)(UINT nMsg, WPARAM wParam, LPARAM lParam);
-	std::map<UINT, MSGFUNC> m_mapFunc;
+	std::map<UINT, MSGFUNC> m_mapFunc; // 消息和消息对应的回调函数
 	HANDLE m_hThread;
-	std::mutex m_lock;
 	bool m_bAutoClosed;
-	std::list<CPacket> m_lstSend;
-	std::map<HANDLE, std::list<CPacket>&> m_mapAck;
-	std::map<HANDLE, bool> m_mapAutoClosed;
 	int m_nIP;
 	int m_nPort;
 	std::vector<char> m_buffer;
@@ -177,17 +157,7 @@ private:
 	}
 	static unsigned __stdcall threadEntry(void* arg);
 	void threadFunc();
-	bool InitSockEnv() {
-		// 套接字初始化
-		WSADATA data;
-		if (WSAStartup(MAKEWORD(1, 1), &data) != 0) {
-			return false;
-		}
-		else {
-			m_sock = socket(PF_INET, SOCK_STREAM, 0);
-			return true;
-		}
-	}
+	bool InitSockEnv(); // 套接字初始化
 	static void releaseInstance() {
 		if (mInstance != NULL) {
 			delete mInstance;
@@ -199,6 +169,7 @@ private:
 		return send(m_sock, pData, nSize, 0) > 0;
 	}
 	bool Send(const CPacket& pack);
+	// WM_SEND_PACK 消息对应的真正发送包数据的函数
 	void SendPack(UINT nMsg, WPARAM wParam, LPARAM lParam); // wParam：缓冲区的值   lParam：缓冲区的长度
 	static CClientSocket* mInstance;
 	// 私有类，帮助调用析构函数

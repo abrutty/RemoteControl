@@ -174,7 +174,6 @@ void CRemoteClientDlg::OnBnClickedBtnTest()
 {
 	// TODO: 在此添加控件通知处理程序代码
 	CClientController::getInstance()->SendCommandPacket(GetSafeHwnd(), 1981);
-
 }
 
 

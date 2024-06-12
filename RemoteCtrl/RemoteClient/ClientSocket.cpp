@@ -26,7 +26,7 @@ CPacket::CPacket(WORD sCmd, const BYTE* pData, size_t nSize)
 {
 	{
 		this->sHead = 0xFEFF;
-		this->nLength = nSize + 4;	// 数据长度+sCmd长度(2)+sSum长度(2)
+		this->nLength = (DWORD)(nSize + 4);	// 数据长度+sCmd长度(2)+sSum长度(2)
 		this->sCmd = sCmd;
 		if (nSize > 0) {
 			this->strData.resize(nSize);
@@ -43,6 +43,25 @@ CPacket::CPacket(WORD sCmd, const BYTE* pData, size_t nSize)
 	}
 }
 
+CPacket::CPacket(const CPacket& pack)
+{
+	sHead = pack.sHead;
+	nLength = pack.nLength;
+	sCmd = pack.sCmd;
+	strData = pack.strData;
+	sSUm = pack.sSUm;
+}
+
+CPacket& CPacket::operator=(const CPacket& pack) {
+	if (this != &pack) {
+		sHead = pack.sHead;
+		nLength = pack.nLength;
+		sCmd = pack.sCmd;
+		strData = pack.strData;
+		sSUm = pack.sSUm;
+	}
+	return *this;
+}
 // 解包构造函数
 CPacket::CPacket(const BYTE* pData, size_t& nSize)
 {
@@ -110,7 +129,7 @@ bool CClientSocket::SendPacket(HWND hWnd, const CPacket& pack, bool isAutoClosed
 	std::string strOut;
 	pack.Data(strOut);
 	PACKET_DATA* pData = new PACKET_DATA(strOut.c_str(), strOut.size(), nMode, wParam);
-	bool ret = PostThreadMessage(m_nThreadID, WM_SEND_PACK, (WPARAM)pData, (LPARAM)hWnd);
+	bool ret = PostThreadMessage(m_nThreadID, WM_SEND_PACK, (WPARAM)pData, (LPARAM)hWnd); // 只是把消息放到对应的线程消息队列中
 	if (ret == false) {
 		delete pData;
 	}
@@ -188,7 +207,7 @@ int CClientSocket::DealCommand()
 	char* buffer = m_buffer.data();
 	static size_t index = 0;
 	while (true) {
-		size_t len = recv(m_sock, buffer + index, BUFFER_SIZE - index, 0);
+		size_t len = recv(m_sock, buffer + index, (int)(BUFFER_SIZE - index), 0);
 		if (((int)len <= 0) && ((int)index <= 0)) return -1; // len是size_t，recv返回-1时会变成大于0的数，所以要强转为int判断
 		TRACE("index = %d, len=%d\r\n", index, len);
 		index += len;
@@ -229,13 +248,25 @@ void CClientSocket::threadFunc()
 	}
 }
 
+bool CClientSocket::InitSockEnv()
+{
+	WSADATA data;
+	if (WSAStartup(MAKEWORD(1, 1), &data) != 0) {
+		return false;
+	}
+	else {
+		m_sock = socket(PF_INET, SOCK_STREAM, 0);
+		return true;
+	}
+}
+
 bool CClientSocket::Send(const CPacket& pack)
 {
 	TRACE("m_sock = %d\r\n", m_sock);
 	if (m_sock == -1) return false;
 	std::string strOut;
 	pack.Data(strOut);
-	return send(m_sock, strOut.c_str(), strOut.size(), 0) > 0;
+	return send(m_sock, strOut.c_str(), (int)strOut.size(), 0) > 0;
 }
 
 void CClientSocket::SendPack(UINT nMsg, WPARAM wParam, LPARAM lParam)
@@ -253,7 +284,7 @@ void CClientSocket::SendPack(UINT nMsg, WPARAM wParam, LPARAM lParam)
 			strBuffer.resize(BUFFER_SIZE);
 			char* pBuffer = (char*)strBuffer.c_str();
 			while (m_sock != INVALID_SOCKET) {
-				int length = recv(m_sock, pBuffer + index, BUFFER_SIZE - index, 0);
+				int length = recv(m_sock, pBuffer + index, (int)(BUFFER_SIZE - index), 0);
 				if ((length>0) || (index>0)) {
 					index += (size_t)length;
 					size_t nLen = index;
